@@ -1,2 +1,6 @@
 # Runtime dependencies
 feedparser
+
+# Video rendering dependencies
+imageio-ffmpeg
+playwright
