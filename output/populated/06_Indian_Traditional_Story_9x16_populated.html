@@ -1,0 +1,17 @@
+<!DOCTYPE html>
+<html lang="en"><head><meta charset="UTF-8"><meta name="viewport" content="width=device-width,initial-scale=1.0"><title>Indian Traditional Story</title>
+<style>
+*{box-sizing:border-box}html,body{margin:0;height:100%;overflow:hidden;background:#0b0705;color:#f5ead2;font-family:"Noto Serif",Georgia,serif}.container{width:min(100vw,calc(100dvh*9/16));height:100dvh;margin:auto;overflow-y:auto;scroll-snap-type:y mandatory;scrollbar-width:none}.container::-webkit-scrollbar{display:none}.slide{position:relative;width:100%;height:100dvh;min-height:100dvh;aspect-ratio:9/16;scroll-snap-align:start;overflow:hidden}.bg{position:absolute;inset:0;background-size:cover;background-position:center;opacity:.30;z-index:-3}.overlay{position:absolute;inset:0;background:linear-gradient(90deg,#0b0705ee,#0b070577,#0b0705ee),linear-gradient(#0b0705aa,transparent 35%,#0b0705ee);z-index:-2}.texture{position:absolute;inset:0;opacity:.1;background:repeating-linear-gradient(0deg,transparent 0 3px,#d9ad5c08 4px)}.frame{position:absolute;inset:16px;border:1px solid #d9ad5c88}.frame:before{content:"";position:absolute;inset:7px;border:1px solid #d9ad5c33}.content{position:absolute;top:50%;transform:translateY(-50%);width:72%;padding:7%;background:#140d0ab0;border-left:3px solid #d9ad5c;backdrop-filter:blur(10px)}.left{left:8%}.right{right:8%}.center{left:50%;transform:translate(-50%,-50%);text-align:center}.chapter{font-size:10px;letter-spacing:4px;color:#e6c77e}.title{font-size:clamp(28px,7vw,56px);line-height:1.03;margin:15px 0}.text{font-size:clamp(15px,3.7vw,21px);line-height:1.75;color:#d8c9ae}.om{font-size:42px;color:#e6c77e}.progress{position:absolute;top:0;left:0;width:100%;height:3px;background:#fff1}.fill{height:100%;width:0;background:#d9ad5c}
+</style></head><body><main class="container" id="app"></main><script>
+const storyData = [
+  {
+    "chapter": "",
+    "title": "Test",
+    "text": "Hello",
+    "image": "",
+    "textPosition": ""
+  }
+];
+
+const app=document.getElementById("app");function build(){app.innerHTML=`<section class="slide"><div class="progress"><div class="fill"></div></div><div class="texture"></div><div class="frame"></div><div class="content center"><div class="om">ॐ</div><div class="chapter">KNOWLEDGE • STORY</div><h1 class="title">SCIENCE THROUGH TIME</h1><p class="text">ज्ञान की यात्रा — observation से discovery तक.</p></div></section>`+storyData.map(d=>`<section class="slide"><div class="progress"><div class="fill"></div></div><div class="bg" style="background-image:url('${d.image}')"></div><div class="overlay"></div><div class="texture"></div><div class="frame"></div><div class="content ${d.textPosition}"><div class="om">ॐ</div><div class="chapter">${d.chapter}</div><h2 class="title">${d.title}</h2><p class="text">${d.text}</p></div></section>`).join("")}build();const io=new IntersectionObserver(es=>es.forEach(e=>{if(e.isIntersecting){const f=e.target.querySelector(".fill");if(f){f.style.transition="none";f.style.width="0";requestAnimationFrame(()=>{f.style.transition="width 8s linear";f.style.width="100%"})}}}),{root:app,threshold:.65});document.querySelectorAll(".slide").forEach(s=>io.observe(s));
+</script></body></html>

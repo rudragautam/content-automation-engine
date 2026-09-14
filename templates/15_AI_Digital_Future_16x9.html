@@ -1,0 +1,62 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width,initial-scale=1.0">
+<title>AI — Digital Future</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&family=Orbitron:wght@500;600;700&display=swap" rel="stylesheet">
+<style>
+:root{--bg:#07030b;--pink:#ff4fd8;--orange:#ff8a3d;--purple:#8b5cff;--cyan:#5cf4ff;--white:#faf7ff;--muted:#aaa0b8;--line:rgba(255,79,216,.18);--image-opacity:.20}
+*{box-sizing:border-box;margin:0;padding:0}html,body{width:100%;height:100%;overflow:hidden}
+body{background:var(--bg);color:var(--white);font-family:Inter,sans-serif}.story{width:100%;height:100dvh;overflow-y:auto;overflow-x:hidden;scroll-snap-type:y mandatory;scroll-behavior:smooth}.story::-webkit-scrollbar{width:0}
+.slide{position:relative;width:100%;height:100dvh;min-height:100dvh;scroll-snap-align:start;overflow:hidden;isolation:isolate;background:#07030b}
+.bg{position:absolute;inset:0;z-index:-8;background:center/cover no-repeat;opacity:var(--image-opacity);filter:brightness(.5) saturate(1.15);transform:scale(1.05);transition:transform 1.4s}.active .bg{transform:scale(1)}
+.bgfx{position:absolute;inset:0;z-index:-7;background:radial-gradient(circle at 75% 25%,rgba(255,79,216,.17),transparent 25%),radial-gradient(circle at 20% 80%,rgba(139,92,255,.14),transparent 30%),linear-gradient(110deg,rgba(7,3,11,.97),rgba(7,3,11,.55),rgba(7,3,11,.88))}
+.mesh{position:absolute;inset:-20%;z-index:-5;opacity:.15;background:linear-gradient(115deg,transparent 48%,rgba(255,79,216,.2) 49%,transparent 50%),linear-gradient(65deg,transparent 48%,rgba(92,244,255,.16) 49%,transparent 50%);background-size:90px 90px;transform:perspective(500px) rotateX(55deg) translateY(15%);transform-origin:center}
+.noise{position:absolute;inset:0;z-index:30;pointer-events:none;opacity:.035;background-image:url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='120' height='120'%3E%3Cfilter id='n'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='.8' numOctaves='3' stitchTiles='stitch'/%3E%3C/filter%3E%3Crect width='100%25' height='100%25' filter='url(%23n)' opacity='.8'/%3E%3C/svg%3E")}
+.progress{position:absolute;top:0;left:0;width:100%;height:3px;background:rgba(255,255,255,.05);z-index:50}.bar{height:100%;width:0;background:linear-gradient(90deg,var(--pink),var(--purple),var(--cyan));box-shadow:0 0 18px rgba(255,79,216,.7)}
+.header{position:absolute;top:28px;left:5%;right:5%;display:flex;justify-content:space-between;z-index:20}.brand{font:600 12px Orbitron;letter-spacing:3px}.brand em{color:var(--pink);font-style:normal}.time{font:9px Orbitron;letter-spacing:2px;color:#8f829e}
+.content{position:absolute;top:50%;transform:translateY(-50%);width:min(800px,57vw);z-index:10}.left{left:7%}.right{right:7%}.center{left:50%;transform:translate(-50%,-50%);text-align:center}.center .tag{justify-content:center}
+.tag{display:flex;align-items:center;gap:10px;color:var(--pink);font:10px Orbitron;letter-spacing:3px;margin-bottom:18px}.tag i{width:30px;height:1px;background:linear-gradient(90deg,var(--pink),var(--orange))}
+h1{font:600 clamp(36px,4.7vw,78px)/1.04 Orbitron;letter-spacing:-2px}.text{margin-top:26px;max-width:700px;color:#aaa1b4;font-size:clamp(14px,1.15vw,18px);line-height:1.75}.cursor{display:inline-block;width:2px;height:1em;background:var(--pink);vertical-align:-2px;margin-left:4px;animation:blink .7s infinite}@keyframes blink{50%{opacity:0}}
+.holo{position:absolute;right:7%;top:25%;width:300px;height:310px;z-index:5;border:1px solid rgba(255,79,216,.2);background:linear-gradient(145deg,rgba(255,79,216,.05),rgba(92,244,255,.025));backdrop-filter:blur(12px);clip-path:polygon(8% 0,92% 0,100% 8%,100% 92%,92% 100%,8% 100%,0 92%,0 8%);padding:20px}.right~.holo{right:auto;left:7%}
+.holoTitle{font:9px Orbitron;letter-spacing:2px;color:#8f839b;border-bottom:1px solid var(--line);padding-bottom:12px}.holoMain{font:30px Orbitron;margin-top:24px;background:linear-gradient(90deg,var(--pink),var(--orange));-webkit-background-clip:text;background-clip:text;color:transparent}.holoDesc{margin-top:8px;font-size:9px;color:#807589}.bars{position:absolute;left:20px;right:20px;bottom:24px;height:105px;display:flex;align-items:end;gap:8px}.bars span{flex:1;background:linear-gradient(to top,var(--purple),var(--pink));height:var(--h);box-shadow:0 0 12px rgba(255,79,216,.2)}
+.orbit{position:absolute;right:7%;bottom:15%;width:250px;height:120px;border:1px solid rgba(92,244,255,.18);border-radius:50%;transform:rotate(-18deg);z-index:3}.orbit:before{content:"";position:absolute;inset:22%;border:1px dashed rgba(255,79,216,.28);border-radius:50%}.orbit:after{content:"";position:absolute;width:8px;height:8px;border-radius:50%;background:var(--cyan);box-shadow:0 0 18px var(--cyan);left:20%;top:43%}
+.number{position:absolute;right:4%;bottom:9%;font:190px Orbitron;color:rgba(255,79,216,.035);z-index:-1}.bottom{position:absolute;bottom:25px;left:5%;right:5%;display:flex;justify-content:space-between;color:#756a80;font:8px Orbitron;letter-spacing:2px;z-index:20}.dots{position:absolute;right:20px;top:50%;transform:translateY(-50%);display:flex;flex-direction:column;gap:8px}.dot{width:4px;height:4px;border-radius:50%;background:#493b50}.dot.active{background:var(--pink);box-shadow:0 0 10px var(--pink)}
+.intro{background:radial-gradient(circle at 72% 42%,rgba(255,79,216,.16),transparent 25%),radial-gradient(circle at 30% 75%,rgba(92,244,255,.08),transparent 25%),#07030b}.introInner{position:absolute;left:7%;top:50%;transform:translateY(-50%)}.introTag{font:10px Orbitron;letter-spacing:4px;color:var(--pink);margin-bottom:22px}.introTitle{font:600 clamp(52px,8vw,135px)/.88 Orbitron;letter-spacing:-5px}.introTitle span{background:linear-gradient(90deg,var(--pink),var(--orange),var(--cyan));-webkit-background-clip:text;background-clip:text;color:transparent}.introSub{margin-top:28px;color:#81758c;font:9px Orbitron;letter-spacing:3px}
+@media(max-width:900px){.content,.left,.right,.center{left:7%;right:7%;width:auto;transform:translateY(-50%);text-align:left}.center .tag{justify-content:flex-start}.holo,.orbit{display:none}.number{font-size:120px}.header{left:20px;right:20px}.bottom{left:20px;right:20px}}
+</style>
+</head>
+<body>
+<div class="story" id="story">
+<section class="slide intro active">
+<div class="progress"><div class="bar"></div></div>
+<div class="introInner"><div class="introTag">AI / DIGITAL FUTURES</div><div class="introTitle">BEYOND<br><span>HUMAN</span><br>LIMITS.</div><div class="introSub">GENERATIVE AI • ROBOTICS • AGENTS • THE NEXT WEB</div></div>
+<div class="mesh"></div><div class="noise"></div><div class="bottom"><span>FUTURE INTELLIGENCE</span><span>01 / 04</span></div>
+</section></div>
+<script>
+const aiData=[
+{section:"GENERATIVE AI",title:"THE COMPUTER IS LEARNING TO SPEAK THE LANGUAGE OF IDEAS",narration:"Generative models made AI feel more conversational. A prompt can now become text, an image, a design, a piece of code or an entirely new creative direction.",image:"https://images.unsplash.com/photo-1677442136019-21780ecad995?auto=format&fit=crop&w=2000&q=85",textPosition:"left",metric:"GEN-AI",desc:"MULTIMODAL",bars:[55,70,48,82,64,91,76]},
+{section:"AI AGENTS",title:"THE NEXT STEP IS NOT JUST ANSWERS — IT IS ACTION",narration:"AI agents are being designed to reason through multi-step tasks, use tools and move from responding to instructions toward completing workflows.",image:"https://images.unsplash.com/photo-1485827404703-89b55fcc595e?auto=format&fit=crop&w=2000&q=85",textPosition:"right",metric:"AGENTS",desc:"ACTION LOOP",bars:[42,58,72,63,88,75,94]},
+{section:"ROBOTICS",title:"WHEN INTELLIGENCE MEETS A BODY, SOFTWARE ENTERS THE PHYSICAL WORLD",narration:"Robotics connects perception, reasoning and movement. Better AI can give machines a richer understanding of environments that humans navigate naturally.",image:"https://images.unsplash.com/photo-1484704849700-f032a568e944?auto=format&fit=crop&w=2000&q=85",textPosition:"left",metric:"ROBOTICS",desc:"REAL WORLD",bars:[50,45,67,78,59,84,72]},
+{section:"THE NEXT ERA",title:"THE MOST IMPORTANT AI BREAKTHROUGH MAY BE HUMAN ADAPTATION",narration:"Technology changes faster when people change with it. The long-term advantage will come from learning how to collaborate with intelligent systems without losing judgment, creativity and responsibility.",image:"https://images.unsplash.com/photo-1451187580459-43490279c0fa?auto=format&fit=crop&w=2000&q=85",textPosition:"center",metric:"2030+",desc:"HUMAN + AI",bars:[62,74,69,88,79,93,86]}
+];
+function createSlide(d,i){const s=document.createElement("section");s.className="slide";s.dataset.index=i;const p=d.textPosition==="right"?"right":d.textPosition==="center"?"center":"left";const bars=d.bars.map(h=>`<span style="--h:${h}%"></span>`).join("");s.innerHTML=`
+<div class="progress"><div class="bar"></div></div><div class="bg" style="background-image:url('${d.image}')"></div><div class="bgfx"></div><div class="mesh"></div><div class="noise"></div>
+<div class="header"><div class="brand"><em>AI</em> / DIGITAL FUTURE</div><div class="time">NETWORK // 01.01</div></div>
+<div class="content ${p}"><div class="tag"><i></i>${d.section}</div><h1>${d.title}</h1><div class="text"><span class="typed"></span><span class="cursor"></span></div></div>
+<div class="holo"><div class="holoTitle">NEURAL TELEMETRY</div><div class="holoMain">${d.metric}</div><div class="holoDesc">${d.desc} // ACTIVE</div><div class="bars">${bars}</div></div>
+<div class="orbit"></div><div class="number">${String(i+1).padStart(2,"0")}</div><div class="dots"><i class="dot"></i><i class="dot"></i><i class="dot"></i><i class="dot"></i></div>
+<div class="bottom"><span>AI / FUTURE / INTELLIGENCE</span><span>SECTOR ${String(i+1).padStart(2,"0")} // ${d.section}</span></div>`;return s}
+aiData.forEach((d,i)=>story.appendChild(createSlide(d,i)));
+const duration=8000;
+function reset(s){clearInterval(s._timer);const t=s.querySelector(".typed"),b=s.querySelector(".bar");if(t)t.textContent="";if(b){b.style.transition="none";b.style.width="0"}}
+function activate(s){document.querySelectorAll(".slide").forEach(x=>x.classList.remove("active"));s.classList.add("active");reset(s);const i=Number(s.dataset.index),b=s.querySelector(".bar");if(!Number.isNaN(i)){const t=s.querySelector(".typed"),d=aiData[i];let n=0;s._timer=setInterval(()=>{if(n>=d.narration.length){clearInterval(s._timer);return}t.textContent+=d.narration[n++];},27);s.querySelectorAll(".dot").forEach((x,j)=>x.classList.toggle("active",j===i))}requestAnimationFrame(()=>requestAnimationFrame(()=>{b.style.transition="width "+duration+"ms linear";b.style.width="100%"}))}
+const observer=new IntersectionObserver(es=>es.forEach(e=>{if(e.isIntersecting)activate(e.target)}),{threshold:.65});document.querySelectorAll(".slide").forEach(s=>observer.observe(s));
+document.addEventListener("keydown",e=>{const a=[...document.querySelectorAll(".slide")],c=a.findIndex(s=>s.classList.contains("active"));if(e.key==="ArrowDown")a[Math.min(c+1,a.length-1)].scrollIntoView({behavior:"smooth"});if(e.key==="ArrowUp")a[Math.max(c-1,0)].scrollIntoView({behavior:"smooth"})});
+activate(document.querySelector(".slide"));
+</script>
+</body>
+</html>

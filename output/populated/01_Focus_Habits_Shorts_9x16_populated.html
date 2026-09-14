@@ -1,0 +1,35 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8"><meta name="viewport" content="width=device-width,initial-scale=1.0">
+<title>5 Daily Habits That Ruin Your Focus</title>
+<style>
+:root{--bg:#06060d;--text:#f7f7fb;--muted:rgba(255,255,255,.68);--glass:rgba(255,255,255,.07);--border:rgba(255,255,255,.13);--accent:#9d7cff;--accent-2:#46eaff;--duration:5.5s}
+*{box-sizing:border-box}html,body{margin:0;width:100%;height:100%;overflow:hidden;background:var(--bg);color:var(--text);font-family:Inter,system-ui,sans-serif}
+.shorts-container{width:min(100vw,calc(100dvh * 9 / 16));height:100dvh;margin:0 auto;overflow-y:auto;overflow-x:hidden;scroll-snap-type:y mandatory;scrollbar-width:none}
+.shorts-container::-webkit-scrollbar{display:none}.slide{position:relative;width:100%;height:100dvh;min-height:100dvh;aspect-ratio:9/16;overflow:hidden;scroll-snap-align:start;scroll-snap-stop:always;display:flex;align-items:center;justify-content:center;padding:8%}
+.slide:before{content:"";position:absolute;inset:0;background:radial-gradient(circle at 20% 20%,rgba(157,124,255,.2),transparent 35%),radial-gradient(circle at 80% 80%,rgba(70,234,255,.12),transparent 35%);z-index:-2}
+.card{position:relative;width:100%;padding:11%;border:1px solid var(--border);background:var(--glass);backdrop-filter:blur(18px);border-radius:28px;box-shadow:0 25px 80px rgba(0,0,0,.45);z-index:2}
+.watermark{position:absolute;right:5%;top:4%;font-size:clamp(100px,24vw,220px);font-weight:900;color:rgba(255,255,255,.035);line-height:1;z-index:0}
+.progress{position:absolute;top:0;left:0;width:100%;height:4px;background:rgba(255,255,255,.08);z-index:5}.progress-fill{height:100%;width:0;background:linear-gradient(90deg,var(--accent),var(--accent-2));transform-origin:left}
+h1,h2{margin:0;line-height:1.05}h1{font-size:clamp(34px,8vw,64px);text-transform:uppercase}h2{font-size:clamp(27px,6vw,50px)}p{font-size:clamp(16px,3.6vw,23px);line-height:1.65;color:var(--muted)}
+.kicker{font-size:11px;letter-spacing:4px;color:var(--accent-2);margin-bottom:16px}.micro{margin-top:24px;font-size:10px;letter-spacing:3px;color:rgba(255,255,255,.45);text-transform:uppercase}.cursor{display:inline-block;width:2px;height:1em;background:var(--accent-2);vertical-align:-.12em;animation:blink .7s infinite}@keyframes blink{50%{opacity:0}}
+</style></head>
+<body><main class="shorts-container" id="app"></main>
+<script>
+const slidesData = [
+  {
+    "title": "Test",
+    "text": "Hello"
+  }
+];
+
+const app=document.getElementById("app");
+function intro(){return `<section class="slide intro"><div class="progress"><div class="progress-fill"></div></div><div class="watermark">01</div><div class="card"><div class="kicker">DAILY MINDSET</div><h1>5 Daily Habits That Ruin Your Focus</h1><p>Some habits quietly destroy your concentration without you noticing.</p><div class="micro">↑ SWIPE UP TO START</div></div></section>`}
+function fact(d,i){return `<section class="slide"><div class="progress"><div class="progress-fill"></div></div><div class="watermark">${String(i+1).padStart(2,"0")}</div><div class="card"><div class="kicker">HABIT ${i+1}</div><h2>${d.title}</h2><p class="type" data-text="${esc(d.text)}"></p></div></section>`}
+function esc(s){return String(s).replace(/&/g,"&amp;").replace(/"/g,"&quot;").replace(/</g,"&lt;").replace(/>/g,"&gt;")}
+function build(){app.innerHTML=intro()+slidesData.map(fact).join("")}
+function reset(s){clearInterval(s._tw);const f=s.querySelector(".progress-fill");if(f){f.style.transition="none";f.style.width="0"}const t=s.querySelector(".type");if(t)t.innerHTML=""}
+function activate(s){document.querySelectorAll(".slide").forEach(reset);s.classList.add("active");const f=s.querySelector(".progress-fill");if(f)requestAnimationFrame(()=>{f.style.transition=`width ${5500}ms linear`;f.style.width="100%"});const t=s.querySelector(".type");if(t){let i=0;const text=t.dataset.text;t.innerHTML="";const c=document.createElement("span");c.className="cursor";t.append(c);s._tw=setInterval(()=>{if(i>=text.length)return clearInterval(s._tw);c.before(document.createTextNode(text[i++]));},28)}}
+build();const io=new IntersectionObserver(es=>es.forEach(e=>{if(e.isIntersecting&&e.intersectionRatio>.65)activate(e.target)}),{root:app,threshold:.65});document.querySelectorAll(".slide").forEach(s=>io.observe(s));activate(document.querySelector(".slide"));
+</script></body></html>

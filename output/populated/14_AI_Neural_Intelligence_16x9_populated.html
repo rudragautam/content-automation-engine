@@ -1,0 +1,74 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width,initial-scale=1.0">
+<title>AI — Neural Intelligence</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=DM+Sans:wght@400;500;600;700&family=Space+Grotesk:wght@500;600;700&family=Space+Mono:wght@400;700&display=swap" rel="stylesheet">
+<style>
+:root{--bg:#03070b;--cyan:#61efff;--blue:#347cff;--violet:#9c70ff;--white:#effcff;--muted:#8193a6;--line:rgba(97,239,255,.16);--image-opacity:.18}
+*{box-sizing:border-box;margin:0;padding:0}html,body{width:100%;height:100%;overflow:hidden}
+body{background:var(--bg);color:var(--white);font-family:"DM Sans",sans-serif}
+.story{height:100dvh;width:100%;overflow-y:auto;overflow-x:hidden;scroll-snap-type:y mandatory;scroll-behavior:smooth}.story::-webkit-scrollbar{width:0}
+.slide{position:relative;width:100%;height:100dvh;min-height:100dvh;scroll-snap-align:start;overflow:hidden;isolation:isolate;background:#03070b}
+.bg{position:absolute;inset:0;z-index:-8;background:center/cover no-repeat;opacity:var(--image-opacity);filter:brightness(.55) saturate(.8);transform:scale(1.04);transition:transform 1.3s}.slide.active .bg{transform:scale(1)}
+.overlay{position:absolute;inset:0;z-index:-7;background:radial-gradient(circle at 70% 35%,rgba(52,124,255,.16),transparent 30%),radial-gradient(circle at 20% 75%,rgba(156,112,255,.10),transparent 32%),linear-gradient(90deg,rgba(3,7,11,.98),rgba(3,7,11,.66),rgba(3,7,11,.90))}
+.grid{position:absolute;inset:0;z-index:-5;opacity:.22;background:linear-gradient(rgba(97,239,255,.055) 1px,transparent 1px),linear-gradient(90deg,rgba(97,239,255,.055) 1px,transparent 1px);background-size:48px 48px}
+.scan{position:absolute;inset:0;z-index:25;pointer-events:none;opacity:.05;background:repeating-linear-gradient(0deg,transparent 0 4px,rgba(255,255,255,.12) 5px)}
+.progress{position:absolute;top:0;left:0;width:100%;height:3px;background:rgba(255,255,255,.05);z-index:50}.bar{height:100%;width:0;background:linear-gradient(90deg,var(--cyan),var(--blue),var(--violet));box-shadow:0 0 16px rgba(97,239,255,.7)}
+.header{position:absolute;top:28px;left:5%;right:5%;display:flex;justify-content:space-between;align-items:center;z-index:20}
+.brand{display:flex;gap:12px;align-items:center}.mark{width:32px;height:32px;border:1px solid var(--cyan);display:grid;place-items:center;border-radius:8px;color:var(--cyan);font:700 10px "Space Mono";box-shadow:0 0 20px rgba(97,239,255,.12)}.brandtext{font:600 12px "Space Grotesk";letter-spacing:3px}.status{font:9px "Space Mono";letter-spacing:2px;color:#73879c}.status i{display:inline-block;width:6px;height:6px;border-radius:50%;background:#48f5a0;box-shadow:0 0 10px #48f5a0;margin-right:8px}
+.content{position:absolute;top:50%;transform:translateY(-50%);width:min(760px,56vw);z-index:10}.left{left:7%}.right{right:7%}.center{left:50%;transform:translate(-50%,-50%);text-align:center}.center .kicker{justify-content:center}
+.kicker{display:flex;align-items:center;gap:10px;color:var(--cyan);font:10px "Space Mono";letter-spacing:3px;margin-bottom:18px}.kicker b{display:block;width:34px;height:1px;background:var(--cyan);box-shadow:0 0 10px var(--cyan)}
+h1{font:600 clamp(36px,4.7vw,78px)/1.03 "Space Grotesk";letter-spacing:-2.8px}.narration{margin-top:26px;max-width:680px;color:#92a5b8;font-size:clamp(14px,1.15vw,18px);line-height:1.7}.cursor{display:inline-block;width:2px;height:1em;background:var(--cyan);vertical-align:-2px;margin-left:4px;animation:blink .75s infinite}@keyframes blink{50%{opacity:0}}
+.panel{position:absolute;right:7%;top:26%;width:285px;padding:17px;border:1px solid var(--line);background:rgba(5,12,21,.62);backdrop-filter:blur(14px);z-index:12;box-shadow:0 0 45px rgba(0,0,0,.3)}.right~.panel{right:auto;left:7%}
+.paneltop{display:flex;justify-content:space-between;color:#71859a;font:8px "Space Mono";letter-spacing:2px;border-bottom:1px solid var(--line);padding-bottom:11px;margin-bottom:14px}.live{color:#48f5a0}.signal{font:30px "Space Grotesk";color:var(--white)}.sub{font:9px "Space Mono";color:var(--cyan);margin-top:4px}.nodes{margin-top:16px;display:grid;grid-template-columns:1fr 1fr;gap:8px}.node{border:1px solid rgba(97,239,255,.10);padding:9px;background:rgba(97,239,255,.025)}.node small{display:block;color:#61758b;font:7px "Space Mono";letter-spacing:1px}.node strong{display:block;margin-top:5px;color:#cfe8f2;font:10px "Space Mono"}
+.brain{position:absolute;right:8%;bottom:18%;width:310px;height:210px;z-index:3;opacity:.7}.brain span{position:absolute;width:8px;height:8px;border:1px solid var(--cyan);border-radius:50%;box-shadow:0 0 12px rgba(97,239,255,.5)}.brain span:nth-child(1){left:15%;top:45%}.brain span:nth-child(2){left:35%;top:18%}.brain span:nth-child(3){left:52%;top:50%}.brain span:nth-child(4){left:72%;top:28%}.brain span:nth-child(5){left:82%;top:67%}.brain:before{content:"";position:absolute;inset:15%;background:linear-gradient(135deg,transparent 47%,rgba(97,239,255,.28) 48% 49%,transparent 50%),linear-gradient(30deg,transparent 47%,rgba(156,112,255,.22) 48% 49%,transparent 50%);filter:drop-shadow(0 0 5px rgba(97,239,255,.25))}
+.scene{position:absolute;right:5%;bottom:12%;font:190px/1 "Space Mono";color:rgba(97,239,255,.035);z-index:-1}.bottom{position:absolute;bottom:26px;left:5%;right:5%;display:flex;justify-content:space-between;color:#60758b;font:8px "Space Mono";letter-spacing:2px;z-index:20}
+.dots{position:absolute;right:20px;top:50%;transform:translateY(-50%);display:flex;flex-direction:column;gap:8px}.dot{width:4px;height:4px;border-radius:50%;background:#3b5065}.dot.active{background:var(--cyan);box-shadow:0 0 10px var(--cyan)}
+.intro{background:radial-gradient(circle at 72% 45%,rgba(52,124,255,.15),transparent 30%),#03070b}.introInner{position:absolute;left:7%;top:50%;transform:translateY(-50%)}.introK{font:10px "Space Mono";letter-spacing:4px;color:var(--cyan);margin-bottom:20px}.introTitle{font:600 clamp(55px,8.5vw,140px)/.86 "Space Grotesk";letter-spacing:-5px}.introTitle span{background:linear-gradient(90deg,var(--cyan),var(--blue),var(--violet));-webkit-background-clip:text;background-clip:text;color:transparent}.introSub{margin-top:28px;color:#6f8297;font:9px "Space Mono";letter-spacing:3px}
+@media(max-width:900px){.content,.left,.right,.center{left:7%;right:7%;width:auto;transform:translateY(-50%);text-align:left}.center .kicker{justify-content:flex-start}.panel,.brain{display:none}.scene{font-size:120px}.header{left:20px;right:20px}.bottom{left:20px;right:20px}}
+</style>
+</head>
+<body>
+<div class="story" id="story">
+<section class="slide intro active">
+<div class="progress"><div class="bar"></div></div>
+<div class="introInner"><div class="introK">ARTIFICIAL INTELLIGENCE / SERIES 01</div><div class="introTitle">THE<br>AGE OF<br><span>INTELLIGENCE.</span></div><div class="introSub">MODELS • DATA • MACHINES • HUMAN CURIOSITY</div></div>
+<div class="grid"></div><div class="scan"></div>
+<div class="bottom"><span>AI / EXPLAINED</span><span>01 / 04</span></div>
+</section>
+</div>
+<script>
+const aiData = [
+  {
+    "section": "",
+    "title": "Test",
+    "narration": "",
+    "image": "",
+    "textPosition": "",
+    "signal": "",
+    "sub": ""
+  }
+];
+
+function createSlide(d,i){const s=document.createElement("section");s.className="slide";s.dataset.index=i;const p=d.textPosition==="right"?"right":d.textPosition==="center"?"center":"left";s.innerHTML=`
+<div class="progress"><div class="bar"></div></div><div class="bg" style="background-image:url('${d.image}')"></div><div class="overlay"></div><div class="grid"></div><div class="scan"></div>
+<div class="header"><div class="brand"><div class="mark">AI</div><div class="brandtext">NEURAL INTELLIGENCE</div></div><div class="status"><i></i>SYSTEM ONLINE</div></div>
+<div class="content ${p}"><div class="kicker"><b></b>${d.section}</div><h1>${d.title}</h1><div class="narration"><span class="typed"></span><span class="cursor"></span></div></div>
+<div class="panel"><div class="paneltop"><span>MODEL SIGNAL</span><span class="live">● LIVE</span></div><div class="signal">${d.signal}</div><div class="sub">${d.sub}</div><div class="nodes"><div class="node"><small>01</small><strong>${d.m1}</strong></div><div class="node"><small>02</small><strong>${d.m2}</strong></div><div class="node"><small>03</small><strong>${d.m3}</strong></div><div class="node"><small>04</small><strong>${d.m4}</strong></div></div></div>
+<div class="brain"><span></span><span></span><span></span><span></span><span></span></div><div class="scene">${String(i+1).padStart(2,"0")}</div>
+<div class="dots"><i class="dot"></i><i class="dot"></i><i class="dot"></i><i class="dot"></i></div>
+<div class="bottom"><span>AI / DATA / INTELLIGENCE</span><span>NODE ${String(i+1).padStart(2,"0")} // ${d.section}</span></div>`;return s}
+aiData.forEach((d,i)=>story.appendChild(createSlide(d,i)));
+const duration=8000;
+function reset(s){clearInterval(s._timer);const t=s.querySelector(".typed"),b=s.querySelector(".bar");if(t)t.textContent="";if(b){b.style.transition="none";b.style.width="0"}}
+function activate(s){document.querySelectorAll(".slide").forEach(x=>x.classList.remove("active"));s.classList.add("active");reset(s);const i=Number(s.dataset.index);if(!Number.isNaN(i)){const d=aiData[i],t=s.querySelector(".typed"),b=s.querySelector(".bar");let n=0;s._timer=setInterval(()=>{if(n>=d.narration.length){clearInterval(s._timer);return}t.textContent+=d.narration[n++];},27);requestAnimationFrame(()=>requestAnimationFrame(()=>{b.style.transition="width "+duration+"ms linear";b.style.width="100%"}));s.querySelectorAll(".dot").forEach((x,j)=>x.classList.toggle("active",j===i))}else{const b=s.querySelector(".bar");requestAnimationFrame(()=>requestAnimationFrame(()=>{b.style.transition="width "+duration+"ms linear";b.style.width="100%"}))}}
+const observer=new IntersectionObserver(es=>es.forEach(e=>{if(e.isIntersecting)activate(e.target)}),{threshold:.65});document.querySelectorAll(".slide").forEach(s=>observer.observe(s));
+document.addEventListener("keydown",e=>{const a=[...document.querySelectorAll(".slide")],c=a.findIndex(s=>s.classList.contains("active"));if(e.key==="ArrowDown")a[Math.min(c+1,a.length-1)].scrollIntoView({behavior:"smooth"});if(e.key==="ArrowUp")a[Math.max(c-1,0)].scrollIntoView({behavior:"smooth"})});
+activate(document.querySelector(".slide"));
+</script>
+</body>
+</html>
