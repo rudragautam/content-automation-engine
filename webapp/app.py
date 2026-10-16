@@ -14,7 +14,7 @@ from markupsafe import Markup
 
 from content_templates import NICHES, workbook_bytes
 from publishing.youtube import YouTubeError
-from webapp import analytics, db, mock, queue, timeutil, youtube_sync
+from webapp import ai_drafts, analytics, db, mock, queue, timeutil, youtube_sync
 from webapp.queue import ActionError
 
 HERE = os.path.dirname(os.path.abspath(__file__))
@@ -29,6 +29,8 @@ async def lifespan(_app):
         mock.seed(conn)
         # A render interrupted by a restart would otherwise stay "rendering" forever.
         conn.execute("UPDATE videos SET status = 'failed', error = 'Render interrupted by a restart; render again.' WHERE status = 'rendering'")
+        conn.execute("UPDATE videos SET status = 'rendered', error = 'Upload interrupted by a restart; upload again.' WHERE status = 'uploading'")
+        conn.execute("UPDATE drafts SET status = 'failed', error = 'Generation interrupted by a restart; generate again.' WHERE status = 'generating'")
     yield
 
 
@@ -73,7 +75,8 @@ def page(request: Request, name: str, **ctx):
     with db.session() as conn:
         ctx.setdefault("alert_count", len(analytics.alerts(conn)))
         ctx.setdefault("mock_count_global", conn.execute("SELECT COUNT(*) FROM channels WHERE is_mock = 1").fetchone()[0])
-    return templates.TemplateResponse(request, name, {"active": name.split(".")[0], "ranges": RANGES, **ctx})
+    active = ctx.pop("active_override", None) or name.split(".")[0]
+    return templates.TemplateResponse(request, name, {"active": active, "ranges": RANGES, **ctx})
 
 
 def days_param(days: int) -> int:
@@ -139,9 +142,66 @@ def schedule_page(request: Request, channel: int = 0):
 
 
 @app.get("/content")
-def content_page(request: Request, niche: str = ""):
+def content_page(request: Request, niche: str = "", problem: str = ""):
     with db.session() as conn:
-        return page(request, "content.html", **_content_ctx(conn, niche))
+        return page(request, "content.html", **_content_ctx(conn, niche), gen_problem=problem)
+
+
+@app.post("/content/{niche}/generate")
+def content_generate(niche: str, channel_id: int = Form(...), topic: str = Form(""), count: int = Form(3), instructions: str = Form("")):
+    try:
+        with db.session() as conn:
+            draft_id = ai_drafts.start_draft(conn, niche, channel_id, topic, count, instructions)
+        return RedirectResponse(f"/drafts/{draft_id}", status_code=303)
+    except ActionError as e:
+        return RedirectResponse(f"/content?niche={niche}&problem={_q(e)}#generate", status_code=303)
+
+
+@app.get("/drafts/{draft_id}")
+def draft_page(request: Request, draft_id: int, problem: str = ""):
+    with db.session() as conn:
+        try:
+            draft = ai_drafts.load(conn, draft_id)
+        except ActionError:
+            return Response("Draft not found", status_code=404)
+        return page(request, "draft.html", draft=draft, spec=NICHES[draft["niche"]], problem=problem, active_override="content")
+
+
+@app.get("/api/drafts/{draft_id}")
+def draft_status(draft_id: int):
+    with db.session() as conn:
+        row = conn.execute("SELECT status, error FROM drafts WHERE id = ?", (draft_id,)).fetchone()
+    return dict(row) if row else error("Draft not found.", 404)
+
+
+@app.post("/drafts/{draft_id}/queue")
+def draft_queue(draft_id: int):
+    try:
+        with db.session() as conn:
+            added = ai_drafts.add_to_queue(conn, draft_id)
+            channel_id = conn.execute("SELECT channel_id FROM drafts WHERE id = ?", (draft_id,)).fetchone()[0]
+        return RedirectResponse(f"/channels/{channel_id}?notice=Added+{added}+videos+from+Gemini+to+the+queue.#queue", status_code=303)
+    except ActionError as e:
+        return RedirectResponse(f"/drafts/{draft_id}?problem={_q(e)}", status_code=303)
+
+
+@app.get("/drafts/{draft_id}/excel")
+def draft_excel(draft_id: int):
+    with db.session() as conn:
+        niche = conn.execute("SELECT niche FROM drafts WHERE id = ?", (draft_id,)).fetchone()
+        if not niche:
+            return Response("Draft not found", status_code=404)
+        data = ai_drafts.excel(conn, draft_id)
+    return Response(data, media_type="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+                    headers={"Content-Disposition": f'attachment; filename="gemini_draft_{draft_id}_{niche[0]}.xlsx"'})
+
+
+@app.post("/drafts/{draft_id}/discard")
+def draft_discard(draft_id: int):
+    with db.session() as conn:
+        row = conn.execute("SELECT niche FROM drafts WHERE id = ?", (draft_id,)).fetchone()
+        ai_drafts.discard(conn, draft_id)
+    return RedirectResponse(f"/content?niche={row[0] if row else ''}", status_code=303)
 
 
 @app.post("/content/{niche}/upload")
@@ -338,6 +398,33 @@ def settings_add_channel(name: str = Form(""), niche: str = Form(""), slots: str
         return RedirectResponse(f"/settings?problem={_q(e)}", status_code=303)
 
 
+@app.post("/settings/gemini")
+def settings_gemini(api_key: str = Form("")):
+    try:
+        with db.session() as conn:
+            found = ai_drafts.save_key(conn, api_key)
+        return RedirectResponse(f"/settings?notice=Gemini+key+works%3B+{len(found)}+models+available.#gemini", status_code=303)
+    except ActionError as e:
+        return RedirectResponse(f"/settings?problem={_q(e)}#gemini", status_code=303)
+
+
+@app.post("/settings/gemini/model")
+def settings_gemini_model(model: str = Form("")):
+    try:
+        with db.session() as conn:
+            ai_drafts.set_model(conn, model)
+        return RedirectResponse("/settings?notice=Gemini+model+saved.#gemini", status_code=303)
+    except ActionError as e:
+        return RedirectResponse(f"/settings?problem={_q(e)}#gemini", status_code=303)
+
+
+@app.post("/settings/gemini/remove")
+def settings_gemini_remove():
+    with db.session() as conn:
+        ai_drafts.remove_key(conn)
+    return RedirectResponse("/settings?notice=Gemini+key+removed.#gemini", status_code=303)
+
+
 @app.post("/settings/remove-mock")
 def settings_remove_mock():
     with db.session() as conn:
@@ -397,6 +484,7 @@ def _q(message) -> str:
 def _settings_ctx(conn, request: Request):
     return {
         "client": youtube_sync.client_status(str(request.base_url)),
+        "gemini": ai_drafts.status(conn),
         "channels": [dict(r) for r in conn.execute("SELECT id, name, niche, connection, is_mock, youtube_channel_id, last_synced_at FROM channels ORDER BY is_mock, name")],
         "mock_count": conn.execute("SELECT COUNT(*) FROM channels WHERE is_mock = 1").fetchone()[0],
         "niche_options": [(k, s.name) for k, s in NICHES.items()],
@@ -434,6 +522,7 @@ def _content_ctx(conn, niche: str):
         "niches": [{"id": k, "name": s.name, "aspect": s.aspect_ratio, "pending": counts.get(k, 0), "renders": queue.can_render(k)} for k, s in NICHES.items()],
         "niche": niche, "spec": spec, "channels": channels, "uploads": uploads, "ready": ready,
         "can_render": queue.can_render(niche),
+        "gemini": ai_drafts.status(conn), "drafts": ai_drafts.recent(conn, niche),
         "items_text": f"{spec.items.min_count}–{spec.items.max_count} {spec.items.label}s" if spec.items.min_count != spec.items.max_count else f"{spec.items.min_count} {spec.items.label}s",
     }
 

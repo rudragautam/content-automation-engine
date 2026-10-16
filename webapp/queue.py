@@ -100,33 +100,37 @@ def import_content(conn, niche: str, channel_id: int, filename: str, data: bytes
     result = read_workbook(data, get_spec(niche))
     if not result.ok:
         return result, None
+    return result, queue_videos(conn, niche, channel_id, filename, result)
 
+
+def queue_videos(conn, niche: str, channel_id: int, source: str, result: ImportResult) -> Optional[int]:
+    """Queue validated videos as ready; returns the upload record's ID, or None after adding errors to result."""
     existing = {r[0] for r in conn.execute("SELECT video_ref FROM videos WHERE channel_id = ?", (channel_id,))}
     clashes = [v["video_id"] for v in result.videos if v["video_id"] in existing]
     if clashes:
         result.errors.extend({"row": v["row"], "column": "video_id", "message": f"'{v['video_id']}' is already in this channel's queue"}
                              for v in result.videos if v["video_id"] in clashes)
-        return result, None
+        return None
 
     now = timeutil.now_local()
     for v in result.videos:
         if v["publish_at"] and timeutil.parse(v["publish_at"]) <= now:
             result.errors.append({"row": v["row"], "column": "publish_at", "message": f"{v['publish_at'].replace('T', ' ')} is in the past"})
     if result.errors:
-        return result, None
+        return None
 
     auto = iter(next_free_slots(conn, channel_id, sum(1 for v in result.videos if not v["publish_at"])))
     created = timeutil.fmt(now)
     upload_id = conn.execute(
         "INSERT INTO uploads (niche, channel_id, filename, uploaded_at, videos_added) VALUES (?,?,?,?,?)",
-        (niche, channel_id, filename, created, len(result.videos))).lastrowid
+        (niche, channel_id, source, created, len(result.videos))).lastrowid
     for v in result.videos:
         conn.execute(
             "INSERT INTO videos (channel_id, video_ref, title, description, tags, status, publish_at, content_json, upload_id, created_at) "
             "VALUES (?,?,?,?,?,?,?,?,?,?)",
             (channel_id, v["video_id"], v["youtube"]["title"], v["youtube"]["description"], ", ".join(v["youtube"]["tags"]),
              "ready", v["publish_at"] or next(auto), json.dumps(v["content"], ensure_ascii=False), upload_id, created))
-    return result, upload_id
+    return upload_id
 
 
 # ---------- audio library ----------

@@ -19,5 +19,5 @@ tzdata
 google-api-python-client
 google-auth-oauthlib
 google-auth-httplib2
-# Test client for the web app tests
+# Gemini API client (also the web app's test client)
 httpx

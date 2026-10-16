@@ -63,6 +63,43 @@
   </section>
 </div>
 
+<section class="card section" id="generate">
+  <div class="card-head"><h2>Or generate with Gemini</h2>{% if gemini.configured %}<span class="muted">model {{ gemini.model }}</span>{% endif %}</div>
+  {% if gen_problem %}<div class="notice bad">{{ gen_problem }}</div>{% endif %}
+  {% if not gemini.configured %}
+    <p class="secondary">Add your Gemini API key in <a href="/settings#gemini">Settings</a> and the hub writes {{ spec.name }} videos for you, checked against the same rules as the Excel template.</p>
+  {% elif not channels %}
+    <div class="empty">No channel uses this niche yet.</div>
+  {% else %}
+  <form method="post" action="/content/{{ niche }}/generate" class="form-row">
+    <label class="field" style="flex:2;min-width:240px">Topic or theme
+      <input type="text" name="topic" required maxlength="300" placeholder="{{ 'e.g. habits that kill focus while studying' if niche == 'focus_habits' else 'e.g. a theme for this batch of videos' }}">
+    </label>
+    <label class="field">Videos
+      <select name="count">{% for n in range(1, 11) %}<option value="{{ n }}" {{ 'selected' if n == 3 }}>{{ n }}</option>{% endfor %}</select>
+    </label>
+    <label class="field">Channel
+      <select name="channel_id">{% for c in channels %}<option value="{{ c.id }}">{{ c.name }}</option>{% endfor %}</select>
+    </label>
+    <label class="field" style="flex:2;min-width:240px">Extra instructions (optional)
+      <input type="text" name="instructions" maxlength="1000" placeholder="e.g. use examples from Indian students' lives">
+    </label>
+    <button class="btn primary" type="submit">Generate</button>
+  </form>
+  <p class="muted" style="margin-top:10px;font-size:12.5px">Takes about 20–60 seconds. You review the result before anything is queued, and recent titles from this niche are passed along so topics don't repeat. Check facts before publishing; AI can still get things wrong.</p>
+  {% endif %}
+  {% if drafts %}
+  <div class="table-wrap" style="margin-top:12px"><table>
+    <thead><tr><th>Draft</th><th>Channel</th><th class="r">Videos</th><th>Status</th><th>Created</th></tr></thead>
+    <tbody>{% for d in drafts %}
+      <tr><td><a href="/drafts/{{ d.id }}" class="cell-title">{{ d.topic }}</a></td><td>{{ d.channel_name }}</td><td class="r num">{{ d.count }}</td>
+      <td>{% set m = {'generating': ('accent spin', '', 'Writing'), 'ready': ('accent', '✎', 'Ready to review'), 'failed': ('critical', '✕', 'Failed'), 'queued': ('good', '✓', 'Queued')} %}{% set c = m.get(d.status, ('', '•', d.status)) %}<span class="chip {{ c[0] }}"><span class="i">{{ c[1] }}</span>{{ c[2] }}</span></td>
+      <td class="num">{{ d.created_at | when }}</td></tr>
+    {% endfor %}</tbody>
+  </table></div>
+  {% endif %}
+</section>
+
 <section class="card section">
   <div class="card-head"><h2>Uploaded content waiting for render or upload</h2><span class="muted">{{ ready | length }}</span></div>
   {% if ready %}

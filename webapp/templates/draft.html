@@ -1,0 +1,61 @@
+{% extends "base.html" %}
+{% block title %}Gemini draft{% endblock %}
+{% block content %}
+<div class="page-head">
+  <div>
+    <div class="muted" style="font-size:12.5px"><a href="/content?niche={{ draft.niche }}">Content · {{ spec.name }}</a> /</div>
+    <h1>{{ draft.topic }}</h1>
+    <div class="sub">Gemini draft for {{ draft.channel_name }} · {{ draft.count }} video{{ '' if draft.count == 1 else 's' }} · {{ draft.model }} · {{ draft.created_at | when }}</div>
+  </div>
+  {% if draft.status == 'ready' %}
+  <div class="actions">
+    <a class="btn" href="/drafts/{{ draft.id }}/excel">Download as Excel</a>
+    <form method="post" action="/drafts/{{ draft.id }}/discard" onsubmit="return confirm('Discard this draft?')"><button class="btn danger" type="submit">Discard</button></form>
+    <form method="post" action="/drafts/{{ draft.id }}/queue"><button class="btn primary" type="submit" {{ 'disabled' if not draft.valid_count }}>Add {{ draft.valid_count }} video{{ '' if draft.valid_count == 1 else 's' }} to {{ draft.channel_name }}</button></form>
+  </div>
+  {% endif %}
+</div>
+{% if problem %}<div class="notice bad">{{ problem }}</div>{% endif %}
+
+{% if draft.status == 'generating' %}
+<section class="card" data-draft-poll="{{ draft.id }}">
+  <p><span class="chip accent spin"><span class="i"></span>Writing</span> Gemini is writing {{ draft.count }} {{ spec.items.label }} video{{ '' if draft.count == 1 else 's' }}. This page updates by itself; it usually takes 20–60 seconds.</p>
+</section>
+{% elif draft.status == 'failed' %}
+<section class="card">
+  <div class="notice bad">{{ draft.error }}</div>
+  <a class="btn" href="/content?niche={{ draft.niche }}#generate">Try again</a>
+</section>
+{% else %}
+  {% if draft.status == 'queued' %}<div class="notice ok">These videos were added to {{ draft.channel_name }}'s queue. <a href="/channels/{{ draft.channel_id }}#queue">Open the queue</a></div>{% endif %}
+  {% if draft.status == 'ready' %}
+  <p class="secondary" style="margin-bottom:14px">{{ draft.valid_count }} of {{ draft['items'] | length }} videos pass every check. Read them before adding; failed ones are left out, or fix them in the Excel download and upload it.</p>
+  {% endif %}
+  {% for item in draft['items'] %}
+  {% set r = item.row %}
+  <section class="card section">
+    <div class="card-head">
+      <h2>{{ loop.index }}. {{ r.youtube_title or 'Untitled' }}</h2>
+      {% if item.ok %}<span class="chip good"><span class="i">✓</span>Passes checks</span>{% else %}<span class="chip critical"><span class="i">✕</span>Needs fixing</span>{% endif %}
+    </div>
+    {% if item.errors %}<div class="notice bad">{% for e in item.errors %}<div><code>{{ e }}</code></div>{% endfor %}</div>{% endif %}
+    <dl class="kv" style="margin-bottom:10px">
+      <dt>Description</dt><dd style="white-space:pre-line">{{ r.youtube_description }}</dd>
+      <dt>Tags</dt><dd class="secondary">{{ r.youtube_tags }}</dd>
+      {% for f in spec.intro_fields %}<dt>Intro {{ f.key }}</dt><dd>{{ r['intro_' ~ f.key] }}</dd>{% endfor %}
+    </dl>
+    <div class="table-wrap"><table>
+      <thead><tr><th class="r">#</th>{% for f in spec.items.fields if f.kind != 'url' %}<th>{{ f.key | replace('_', ' ') }}</th>{% endfor %}</tr></thead>
+      <tbody>
+      {% for n in range(1, spec.items.max_count + 1) %}
+        {% set prefix = spec.items.prefix ~ n ~ '_' %}
+        {% if r.get(prefix ~ spec.items.fields[0].key) or r.get(prefix ~ spec.items.fields[1].key) %}
+        <tr><td class="r num muted">{{ n }}</td>{% for f in spec.items.fields if f.kind != 'url' %}<td>{{ r.get(prefix ~ f.key, '') }}</td>{% endfor %}</tr>
+        {% endif %}
+      {% endfor %}
+      </tbody>
+    </table></div>
+  </section>
+  {% endfor %}
+{% endif %}
+{% endblock %}

@@ -86,6 +86,20 @@ CREATE TABLE IF NOT EXISTS quota_usage (
     date TEXT PRIMARY KEY,
     units INTEGER NOT NULL
 );
+CREATE TABLE IF NOT EXISTS drafts (
+    id INTEGER PRIMARY KEY,
+    niche TEXT NOT NULL,
+    channel_id INTEGER NOT NULL REFERENCES channels(id) ON DELETE CASCADE,
+    topic TEXT NOT NULL,
+    count INTEGER NOT NULL,
+    instructions TEXT NOT NULL DEFAULT '',
+    model TEXT NOT NULL,
+    status TEXT NOT NULL,              -- generating | ready | failed | queued | discarded
+    rows_json TEXT,                    -- every generated video as sheet-style rows
+    rejected_json TEXT,
+    error TEXT,
+    created_at TEXT NOT NULL
+);
 CREATE TABLE IF NOT EXISTS settings (
     key TEXT PRIMARY KEY,
     value TEXT NOT NULL

@@ -45,6 +45,46 @@
   </section>
 </div>
 
+<section class="card section" id="gemini">
+  <div class="card-head"><h2>Gemini (writes content for you)</h2>
+    {% if gemini.configured %}<span class="chip good"><span class="i">✓</span>Key saved</span>{% else %}<span class="chip warning"><span class="i">–</span>No key yet</span>{% endif %}
+  </div>
+  <div class="grid cols-2">
+    <div>
+      {% if gemini.configured %}
+        <p class="secondary">Key <code>{{ gemini.masked }}</code>{% if gemini.from_env %} (from the GEMINI_API_KEY environment variable){% endif %}.</p>
+        {% if gemini.models %}
+        <form method="post" action="/settings/gemini/model" class="form-row" style="margin-bottom:12px">
+          <label class="field">Model
+            <select name="model">{% for m in gemini.models %}<option value="{{ m.id }}" {{ 'selected' if m.id == gemini.model }}>{{ m.name }} ({{ m.id }})</option>{% endfor %}</select>
+          </label>
+          <button class="btn" type="submit">Use this model</button>
+        </form>
+        {% endif %}
+      {% endif %}
+      <form method="post" action="/settings/gemini" class="form-row">
+        <label class="field" style="flex:1;min-width:240px">{{ 'Replace' if gemini.configured else 'Gemini' }} API key
+          <input type="password" name="api_key" autocomplete="off" placeholder="AIza…" required>
+        </label>
+        <button class="btn primary" type="submit">Save and test</button>
+      </form>
+      {% if gemini.configured and not gemini.from_env %}
+      <form method="post" action="/settings/gemini/remove" style="margin-top:10px" onsubmit="return confirm('Remove the Gemini key from this PC?')">
+        <button class="btn small danger" type="submit">Remove key</button>
+      </form>
+      {% endif %}
+    </div>
+    <div>
+      <ol class="steps">
+        <li>Create a key at <a href="https://aistudio.google.com/apikey" target="_blank" rel="noopener">Google AI Studio → API keys</a>.</li>
+        <li>Paste it here. The hub tests it by listing the models it can use and picks the newest Flash model; you can change that.</li>
+        <li>Generate on the <a href="/content">Content</a> page: pick a niche, a topic and how many videos.</li>
+      </ol>
+      <p class="muted" style="margin-top:8px;font-size:12.5px">Stored only on this PC in <code>output/hub/secrets/</code>. On Gemini's free tier Google may use prompts to improve its products and limits requests per minute; a paid key doesn't.</p>
+    </div>
+  </div>
+</section>
+
 <section class="card section">
   <div class="card-head"><h2>2. Your channels</h2><span class="muted">{{ channels | length }}</span></div>
   <form method="post" action="/settings/channels" class="form-row" style="margin-bottom:14px">

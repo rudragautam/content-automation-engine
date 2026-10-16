@@ -133,4 +133,15 @@ async function poll(id, row) {
 }
 document.querySelectorAll("[data-video][data-status=rendering], [data-video][data-status=uploading]").forEach((row) => poll(row.dataset.video, row));
 
+// A draft being written by Gemini: reload once it's done.
+const draftBox = document.querySelector("[data-draft-poll]");
+if (draftBox) {
+  const check = async () => {
+    const res = await fetch(`/api/drafts/${draftBox.dataset.draftPoll}`).then((r) => r.json()).catch(() => ({}));
+    if (res.status === "generating" || !res.status) return setTimeout(check, 3000);
+    location.reload();
+  };
+  setTimeout(check, 3000);
+}
+
 mountAll();

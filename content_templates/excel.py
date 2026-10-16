@@ -65,6 +65,20 @@ def workbook_bytes(spec: NicheSpec) -> bytes:
     return buffer.getvalue()
 
 
+def workbook_with_rows(spec: NicheSpec, rows: List[Dict[str, Any]]) -> bytes:
+    """The niche template with rows (column name -> value) filled into the Content sheet."""
+    wb = build_workbook(spec)
+    names = [name for name, _, _ in spec.columns()]
+    for r, row in enumerate(rows, start=2):
+        for key, value in row.items():
+            if key in names:
+                cell = wb[CONTENT_SHEET].cell(row=r, column=names.index(key) + 1, value=value)
+                cell.alignment = Alignment(wrap_text=True, vertical="top")
+    buffer = io.BytesIO()
+    wb.save(buffer)
+    return buffer.getvalue()
+
+
 def build_prompt(spec: NicheSpec) -> str:
     items = spec.items
     count = f"exactly {items.min_count}" if items.min_count == items.max_count else f"{items.min_count} to {items.max_count}"
@@ -195,9 +209,18 @@ def read_workbook(source: Union[str, bytes, io.BytesIO], spec: NicheSpec) -> Imp
     if result.errors:
         return result
 
+    cells = [{h: values[i] if i < len(values) else None for i, h in enumerate(headers) if h} for values in rows[1:]]
+    result = read_rows(cells, spec)
+    if not result.videos and not result.errors:
+        result.errors.append(_error(None, None, f"no videos found; fill the {CONTENT_SHEET} sheet from row 2"))
+    return result
+
+
+def read_rows(rows: List[Dict[str, Any]], spec: NicheSpec, first_row: int = 2) -> ImportResult:
+    """Validate rows given as {column name: value}; the source can be a sheet or an AI answer."""
+    result = ImportResult()
     seen_ids = set()
-    for row_number, values in enumerate(rows[1:], start=2):
-        cells = {h: values[i] if i < len(values) else None for i, h in enumerate(headers) if h}
+    for row_number, cells in enumerate(rows, start=first_row):
         if all(_is_blank(v) for v in cells.values()):
             continue
         errors_before = len(result.errors)
@@ -207,8 +230,6 @@ def read_workbook(source: Union[str, bytes, io.BytesIO], spec: NicheSpec) -> Imp
         seen_ids.add(video["video_id"])
         if len(result.errors) == errors_before:
             result.videos.append(video)
-    if not result.videos and not result.errors:
-        result.errors.append(_error(None, None, f"no videos found; fill the {CONTENT_SHEET} sheet from row 2"))
     return result
 
 
