@@ -58,8 +58,13 @@ class TestFocusHabitsPlan(unittest.TestCase):
             "slides": [{"title": "A", "text": "B"}, {"title": "A", "text": " ".join(["word"] * 200)}],
         })
         self.assertEqual(plan.slides[0].duration, 2.5)
-        self.assertEqual(plan.slides[1].duration, 3.0)
+        self.assertEqual(plan.slides[1].duration, 2.0)
         self.assertEqual(plan.slides[2].duration, 10.0)
+
+    def test_habit_slide_changes_right_after_typing_finishes(self):
+        text = "x" * 100  # typed in 2.8s
+        plan = self.workflow.plan({"intro": {"title": "T"}, "slides": [{"title": "A", "text": text}]})
+        self.assertEqual(plan.slides[1].duration, 3.6)
 
     def test_manual_override(self):
         plan = self.workflow.plan({"intro": {"title": "T"}, "slides": [{"title": "A", "text": "B", "duration": 7}]})

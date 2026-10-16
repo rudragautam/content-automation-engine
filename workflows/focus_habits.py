@@ -8,7 +8,8 @@ Content shape:
 
 Timing rules (template types each slide's text at 28 ms per character):
     intro:  entry + reading(title, text) + hold, 2.5-5s
-    habit:  entry + reading(title) + max(typing(text), reading(text)) + hold, 3-10s
+    habit:  typing(text) + short hold, 2-10s; the slide changes as soon as the
+            typing finishes instead of idling on finished text
 A "duration" given on a slide overrides the rule (still clamped to the range).
 """
 
@@ -21,8 +22,10 @@ from workflows.timing import clamp_seconds, reading_seconds, typing_seconds, wor
 TYPING_MS_PER_CHAR = 28
 ENTRY_SECONDS = 0.6
 HOLD_SECONDS = 1.0
+# Typing starts the moment a habit slide appears; hold just long enough to see the last words.
+TYPED_HOLD_SECONDS = 0.8
 INTRO_RANGE = (2.5, 5.0)
-HABIT_RANGE = (3.0, 10.0)
+HABIT_RANGE = (2.0, 10.0)
 
 
 class FocusHabitsWorkflow(TemplateWorkflow):
@@ -71,16 +74,9 @@ class FocusHabitsWorkflow(TemplateWorkflow):
     def _habit_duration(self, data, override):
         if override is not None:
             return clamp_seconds(float(override), *HABIT_RANGE), "manual override"
-        title_read = reading_seconds(data["title"])
         typing = typing_seconds(data["text"], TYPING_MS_PER_CHAR)
-        text_read = reading_seconds(data["text"])
-        raw = ENTRY_SECONDS + title_read + max(typing, text_read) + HOLD_SECONDS
-        limiter = "reading" if text_read >= typing else "typing"
-        reason = (
-            f"title {title_read:.1f}s + text {max(typing, text_read):.1f}s ({limiter}, "
-            f"{word_count(data['text'])} words / {len(data['text'])} chars) "
-            f"+ {ENTRY_SECONDS}s entry + {HOLD_SECONDS}s hold"
-        )
+        raw = typing + TYPED_HOLD_SECONDS
+        reason = f"typing {typing:.1f}s ({len(data['text'])} chars) + {TYPED_HOLD_SECONDS}s hold"
         return _clamped(raw, HABIT_RANGE, reason)
 
     def populate(self, html: str, plan: WorkflowPlan) -> str:
