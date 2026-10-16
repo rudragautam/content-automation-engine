@@ -1,6 +1,7 @@
 """Hub-level tests for the YouTube connection, uploads and sync, with fake Google services."""
 import unittest
 from unittest import mock
+from urllib.parse import parse_qs, urlparse
 
 from fastapi.testclient import TestClient
 
@@ -63,6 +64,50 @@ class TestYouTubeConnection(HubTestCase):
     def test_callback_with_unknown_state_is_refused(self):
         self.save_client()
         self.assertIn("expired or was already used", self.client.get("/oauth/callback?state=nope&code=x").text)
+
+    def sign_in_as(self, found, form=None):
+        """Start a connect from Settings and finish it as if Google signed in to `found`."""
+        r = self.client.post("/settings/connect", data=form or {"niche": "science_quiz", "slots": "08:00, 18:30"}, follow_redirects=False)
+        self.assertTrue(r.headers["location"].startswith("https://accounts.google.com/"))
+        state = parse_qs(urlparse(r.headers["location"]).query)["state"][0]
+        with mock.patch("publishing.youtube.exchange_code", return_value=mock.Mock(refresh_token="r")),                 mock.patch("publishing.youtube.build_services", return_value=(None, None)),                 mock.patch("publishing.youtube.my_channel", return_value=found),                 mock.patch("publishing.youtube.save_credentials") as saved:
+            page = self.client.get(f"/oauth/callback?state={state}&code=x")
+        return page, saved
+
+    def test_connect_from_settings_creates_the_channel_from_youtube(self):
+        self.save_client()
+        found = {"id": "UCsci", "title": "Science Sawaal", "handle": "@sciencesawaal", "subscribers": 42}
+        page, saved = self.sign_in_as(found)
+        self.assertIn("Connected to YouTube", page.text)
+        self.assertIn("Science Sawaal", page.text)
+        with db.session() as conn:
+            row = conn.execute("SELECT * FROM channels WHERE youtube_channel_id = 'UCsci'").fetchone()
+            times = [r[0] for r in conn.execute("SELECT time FROM channel_slots WHERE channel_id = ? ORDER BY time", (row["id"],))]
+        self.assertEqual((row["name"], row["handle"], row["niche"], row["connection"], row["subscribers"], row["is_mock"]),
+                         ("Science Sawaal", "@sciencesawaal", "science_quiz", "connected", 42, 0))
+        self.assertEqual(times, ["08:00", "18:30"])
+        self.assertEqual(saved.call_args[0][1], youtube_sync.token_path(row["id"]))
+
+        # Connecting the same YouTube channel again renews its sign-in instead of adding a copy.
+        with db.session() as conn:
+            conn.execute("UPDATE channels SET connection = 'expired' WHERE id = ?", (row["id"],))
+        self.sign_in_as(found, {"niche": "crime_files", "slots": "07:00"})
+        with db.session() as conn:
+            rows = conn.execute("SELECT id, niche, connection FROM channels WHERE youtube_channel_id = 'UCsci'").fetchall()
+        self.assertEqual([tuple(r) for r in rows], [(row["id"], "science_quiz", "connected")])
+
+    def test_connect_from_settings_checks_input_and_cancel(self):
+        self.assertIn("Upload your Google OAuth client file", self.client.post("/settings/connect", data={"niche": "focus_habits", "slots": "19:00"}).text)
+        self.save_client()
+        self.assertIn("Not a time", self.client.post("/settings/connect", data={"niche": "focus_habits", "slots": "7pm"}).text)
+        self.assertIn("Pick a niche", self.client.post("/settings/connect", data={"niche": "nope", "slots": "19:00"}).text)
+        r = self.client.post("/settings/connect", data={"niche": "focus_habits", "slots": "19:00"}, follow_redirects=False)
+        state = parse_qs(urlparse(r.headers["location"]).query)["state"][0]
+        page = self.client.get(f"/oauth/callback?state={state}&error=access_denied")
+        self.assertIn("You cancelled the sign-in", page.text)
+        self.assertIn("Connect a YouTube channel", page.text)
+        with db.session() as conn:
+            self.assertEqual(conn.execute("SELECT COUNT(*) FROM channels WHERE is_mock = 0").fetchone()[0], 0)
 
     def test_bind_channel_refuses_mixups(self):
         a, b = self.real_channel("A"), self.real_channel("B")

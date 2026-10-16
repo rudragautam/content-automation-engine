@@ -85,17 +85,32 @@
   </div>
 </section>
 
-<section class="card section">
+<section class="card section" id="channels">
   <div class="card-head"><h2>2. Your channels</h2><span class="muted">{{ channels | length }}</span></div>
-  <form method="post" action="/settings/channels" class="form-row" style="margin-bottom:14px">
-    <label class="field">Channel name <input type="text" name="name" required maxlength="100" placeholder="e.g. Focus Daily"></label>
+  <h3 style="margin-bottom:6px">Connect a YouTube channel</h3>
+  {% if client.present %}
+  <form method="post" action="/settings/connect" class="form-row">
     <label class="field">Niche
       <select name="niche" required>{% for k, name in niche_options %}<option value="{{ k }}">{{ name }}</option>{% endfor %}</select>
     </label>
     <label class="field">Publish times <input type="text" name="slots" value="19:00" placeholder="09:00, 19:00"></label>
-    <button class="btn primary" type="submit">Add channel</button>
+    <button class="btn primary" type="submit">Connect with Google</button>
   </form>
-  <p class="muted" style="font-size:12.5px;margin-bottom:10px">Create the channel on YouTube first (youtube.com/channel_switcher → Create a channel), add it here, then open it and press Connect.</p>
+  <p class="muted" style="font-size:12.5px;margin:8px 0 14px">Sign in with the Google account that owns the channel and pick the channel on Google's list. The hub adds it with its YouTube name. Repeat for each channel; connecting one that's already here just renews its sign-in.</p>
+  {% else %}
+  <p class="secondary" style="margin-bottom:14px">Save the OAuth client file above first.</p>
+  {% endif %}
+  <details style="margin-bottom:14px">
+    <summary class="muted" style="cursor:pointer;font-size:12.5px">Channel not on YouTube yet? Add it by name and connect it later</summary>
+    <form method="post" action="/settings/channels" class="form-row" style="margin-top:8px">
+      <label class="field">Channel name <input type="text" name="name" required maxlength="100" placeholder="e.g. Focus Daily"></label>
+      <label class="field">Niche
+        <select name="niche" required>{% for k, name in niche_options %}<option value="{{ k }}">{{ name }}</option>{% endfor %}</select>
+      </label>
+      <label class="field">Publish times <input type="text" name="slots" value="19:00" placeholder="09:00, 19:00"></label>
+      <button class="btn" type="submit">Add channel</button>
+    </form>
+  </details>
   <div class="table-wrap"><table>
     <thead><tr><th>Channel</th><th>Niche</th><th>Connection</th><th>YouTube ID</th><th>Last sync</th><th></th></tr></thead>
     <tbody>{% for c in channels %}

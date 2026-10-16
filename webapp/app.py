@@ -398,6 +398,15 @@ def settings_add_channel(name: str = Form(""), niche: str = Form(""), slots: str
         return RedirectResponse(f"/settings?problem={_q(e)}", status_code=303)
 
 
+@app.post("/settings/connect")
+def settings_connect(request: Request, niche: str = Form(""), slots: str = Form("")):
+    try:
+        url = youtube_sync.start_new_connect(niche, slots, str(request.base_url))
+        return RedirectResponse(url, status_code=303)
+    except (ActionError, YouTubeError) as e:
+        return RedirectResponse(f"/settings?problem={_q(e)}#channels", status_code=303)
+
+
 @app.post("/settings/gemini")
 def settings_gemini(api_key: str = Form("")):
     try:
@@ -445,7 +454,7 @@ def oauth_start(request: Request, channel: int):
 @app.get("/oauth/callback")
 def oauth_callback(request: Request, state: str = "", code: str = "", error: str = ""):
     pending = youtube_sync._pending.get(state, {})
-    back = f"/channels/{pending['channel_id']}" if pending else "/settings"
+    back = f"/channels/{pending['channel_id']}" if pending.get("channel_id") else "/settings"
     if error:
         youtube_sync._pending.pop(state, None)
         message = "You cancelled the sign-in." if error == "access_denied" else f"Google returned: {error}"

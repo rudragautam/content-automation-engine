@@ -11,7 +11,7 @@ import os
 import secrets
 import threading
 import time
-from typing import Any, Dict, Optional
+from typing import Any, Dict, List, Optional
 
 from content_templates.specs import NICHES
 from publishing import youtube as yt
@@ -85,13 +85,21 @@ def add_channel(conn, name: str, niche: str, slots: str) -> int:
         raise ActionError("Give the channel a name.")
     if niche not in NICHES:
         raise ActionError("Pick a niche.")
+    return _insert_channel(conn, name, niche, _publish_times(slots))
+
+
+def _publish_times(slots: str) -> List[str]:
     times = sorted({t.strip() for t in slots.split(",") if t.strip()}) or ["19:00"]
     bad = [t for t in times if not TIME_RE.match(t)]
     if bad:
         raise ActionError(f"Not a time (HH:MM, 24-hour): {', '.join(bad)}")
+    return times
+
+
+def _insert_channel(conn, name: str, niche: str, times: List[str], handle: str = "") -> int:
     channel_id = conn.execute(
-        "INSERT INTO channels (name, handle, niche, connection, created_at, is_mock) VALUES (?, '', ?, 'not_connected', ?, 0)",
-        (name[:100], niche, timeutil.now_local().date().isoformat())).lastrowid
+        "INSERT INTO channels (name, handle, niche, connection, created_at, is_mock) VALUES (?, ?, ?, 'not_connected', ?, 0)",
+        (name[:100], handle, niche, timeutil.now_local().date().isoformat())).lastrowid
     conn.executemany("INSERT INTO channel_slots (channel_id, time) VALUES (?, ?)", [(channel_id, t) for t in times])
     return channel_id
 
@@ -115,7 +123,18 @@ def start_connect(conn, channel_id: int, base_url: str) -> str:
     if not channel:
         raise ActionError("Channel not found.")
     if channel["is_mock"]:
-        raise ActionError("This is a mock channel. Add your real channel in Settings and connect that one.")
+        raise ActionError("This is a mock channel. Connect your real channel from Settings instead.")
+    return _sign_in_url({"channel_id": channel_id}, base_url)
+
+
+def start_new_connect(niche: str, slots: str, base_url: str) -> str:
+    """Sign in first; the hub channel is created from whichever YouTube channel the user picks."""
+    if niche not in NICHES:
+        raise ActionError("Pick a niche.")
+    return _sign_in_url({"channel_id": None, "niche": niche, "slots": _publish_times(slots)}, base_url)
+
+
+def _sign_in_url(target: Dict[str, Any], base_url: str) -> str:
     if not os.path.exists(client_path()):
         raise ActionError("Upload your Google OAuth client file in Settings first.")
     now = time.time()
@@ -123,18 +142,22 @@ def start_connect(conn, channel_id: int, base_url: str) -> str:
         _pending.pop(key, None)
     state = secrets.token_urlsafe(24)
     url, verifier = yt.authorization_url(client_path(), redirect_uri(base_url), state)
-    _pending[state] = {"channel_id": channel_id, "verifier": verifier, "at": now}
+    _pending[state] = {**target, "verifier": verifier, "at": now}
     return url
 
 
 def finish_connect(conn, state: str, code: str, base_url: str) -> int:
     pending = _pending.pop(state, None)
     if not pending or time.time() - pending["at"] > STATE_TTL_SECONDS:
-        raise ActionError("This sign-in link expired or was already used. Start again from the channel page.")
-    channel_id = pending["channel_id"]
+        raise ActionError("This sign-in link expired or was already used. Start again from Settings or the channel page.")
     creds = yt.exchange_code(client_path(), redirect_uri(base_url), state, code, pending["verifier"])
     youtube, _ = yt.build_services(creds)
     found = yt.my_channel(youtube)
+    channel_id = pending["channel_id"]
+    if channel_id is None:
+        # The same YouTube channel connected again just gets a fresh sign-in; its niche and times stay.
+        existing = conn.execute("SELECT id FROM channels WHERE youtube_channel_id = ? AND is_mock = 0", (found["id"],)).fetchone()
+        channel_id = existing["id"] if existing else _insert_channel(conn, found["title"], pending["niche"], pending["slots"], found["handle"])
     bind_channel(conn, channel_id, found)
     yt.save_credentials(creds, token_path(channel_id))
     return channel_id
