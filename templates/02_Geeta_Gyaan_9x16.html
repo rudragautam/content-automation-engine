@@ -9,6 +9,12 @@
 .frame{position:absolute;inset:15px;border:1px solid rgba(216,170,85,.55)}.frame:before{content:"";position:absolute;inset:7px;border:1px solid rgba(216,170,85,.18)}
 .card{width:82%;padding:9%;background:rgba(20,12,5,.48);border-left:3px solid var(--gold);backdrop-filter:blur(10px)}
 .om{font-size:48px;color:var(--gold);margin-bottom:18px}.chapter{font-size:11px;letter-spacing:4px;color:var(--gold);margin-bottom:15px}.title{font-size:clamp(27px,7vw,54px);line-height:1.05;margin:0}.text{font-size:clamp(15px,3.8vw,22px);line-height:1.75;color:var(--muted)}.progress{position:absolute;top:0;left:0;width:100%;height:3px;background:#ffffff14;z-index:10}.fill{height:100%;width:0;background:var(--gold)}
+</style><style id="responsive">
+/* Preview-only. The 9:16 column is limited by viewport height on wide screens, so type follows the column width (cqi) instead of the viewport width (vw). When the column is the full viewport width, which is true at every video render size, cqi equals vw and the layout is unchanged. */
+.container{container-type:inline-size}
+.title{font-size:clamp(27px,7cqi,54px)}.text{font-size:clamp(15px,3.8cqi,22px)}
+/* Phone held sideways: a 9:16 column would be too narrow to read, so widen it and tighten spacing. */
+@media (orientation:landscape) and (max-height:500px){.container{width:min(100vw,560px)}.card{width:88%;padding:4% 6%}.om{font-size:28px;margin-bottom:6px}.chapter{margin-bottom:6px}.title{font-size:22px}.text{font-size:14px;line-height:1.5;margin:8px 0 0}}
 </style></head><body><main class="container" id="app"></main><script>
 const slidesData=[
 {chapter:"कर्म",title:"कर्म करते जाओ",text:"अपने कर्म पर अधिकार रखो, परिणाम की चिंता में अपने वर्तमान को मत खोओ।",image:"krishna.jpg"},

@@ -31,7 +31,12 @@ h1{font:600 clamp(36px,4.7vw,78px)/1.03 "Space Grotesk";letter-spacing:-2.8px}.n
 .intro{background:radial-gradient(circle at 72% 45%,rgba(52,124,255,.15),transparent 30%),#03070b}.introInner{position:absolute;left:7%;top:50%;transform:translateY(-50%)}.introK{font:10px "Space Mono";letter-spacing:4px;color:var(--cyan);margin-bottom:20px}.introTitle{font:600 clamp(55px,8.5vw,140px)/.86 "Space Grotesk";letter-spacing:-5px}.introTitle span{background:linear-gradient(90deg,var(--cyan),var(--blue),var(--violet));-webkit-background-clip:text;background-clip:text;color:transparent}.introSub{margin-top:28px;color:#6f8297;font:9px "Space Mono";letter-spacing:3px}
 @media(max-width:900px){.content,.left,.right,.center{left:7%;right:7%;width:auto;transform:translateY(-50%);text-align:left}.center .kicker{justify-content:flex-start}.panel,.brain{display:none}.scene{font-size:120px}.header{left:20px;right:20px}.bottom{left:20px;right:20px}}
 </style>
-</head>
+<style id="responsive">
+/* Preview-only. From 901px to 1599px wide a centred slide overlaps the side panel, so it takes the left position, as the template already does at 900px and below. At 1600px and up, including the 1920x1080 video, nothing changes. */
+@media (min-width:901px) and (max-width:1599px){.center{left:7%;transform:translateY(-50%);text-align:left}.center .kicker{justify-content:flex-start}}
+/* Phones: let the intro title wrap inside the screen. */
+@media (max-width:900px){.introInner{right:7%}.introTitle{font-size:clamp(40px,12vw,64px);letter-spacing:-2px}.introK{letter-spacing:2px}.introSub{letter-spacing:2px;line-height:1.8}}
+</style></head>
 <body>
 <div class="story" id="story">
 <section class="slide intro active">
