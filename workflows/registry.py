@@ -4,9 +4,32 @@ from typing import Dict, Type
 
 from workflows.base import TemplateWorkflow
 from workflows.focus_habits import FocusHabitsWorkflow
+from workflows.slides import (
+    AIDigitalFutureWorkflow,
+    AINeuralIntelligenceWorkflow,
+    CrimeFilesWorkflow,
+    GeetaGyaanWorkflow,
+    GeneralQuizWorkflow,
+    IndianHeritageStoryWorkflow,
+    IndianTraditionalStoryWorkflow,
+    ScienceQuizWorkflow,
+    ScienceStoryWorkflow,
+)
 
 WORKFLOWS: Dict[str, Type[TemplateWorkflow]] = {
-    FocusHabitsWorkflow.template_id: FocusHabitsWorkflow,
+    w.template_id: w
+    for w in (
+        FocusHabitsWorkflow,
+        GeetaGyaanWorkflow,
+        GeneralQuizWorkflow,
+        ScienceQuizWorkflow,
+        ScienceStoryWorkflow,
+        IndianTraditionalStoryWorkflow,
+        IndianHeritageStoryWorkflow,
+        CrimeFilesWorkflow,
+        AINeuralIntelligenceWorkflow,
+        AIDigitalFutureWorkflow,
+    )
 }
 
 

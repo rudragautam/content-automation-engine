@@ -10,8 +10,12 @@ import re
 READING_WORDS_PER_SECOND = 3.0
 
 
+# \w alone splits Devanagari words at their vowel signs, so those marks count as word characters too.
+WORD = re.compile(r"[\wऀ-ॿ]+")
+
+
 def word_count(*texts: str) -> int:
-    return sum(len(re.findall(r"\w+", text or "")) for text in texts)
+    return sum(len(WORD.findall(str(text or ""))) for text in texts)
 
 
 def reading_seconds(*texts: str, words_per_second: float = READING_WORDS_PER_SECOND) -> float:

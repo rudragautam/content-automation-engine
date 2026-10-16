@@ -60,20 +60,26 @@ const aiData = [
 ];
 
 function createSlide(d,i){const s=document.createElement("section");s.className="slide";s.dataset.index=i;const p=d.textPosition==="right"?"right":d.textPosition==="center"?"center":"left";s.innerHTML=`
-<div class="progress"><div class="bar"></div></div><div class="bg" style="background-image:url('${d.image}')"></div><div class="overlay"></div><div class="grid"></div><div class="scan"></div>
+<div class="progress"><div class="bar"></div></div><div class="bg" style="${bg(d.image)}"></div><div class="overlay"></div><div class="grid"></div><div class="scan"></div>
 <div class="header"><div class="brand"><div class="mark">AI</div><div class="brandtext">NEURAL INTELLIGENCE</div></div><div class="status"><i></i>SYSTEM ONLINE</div></div>
-<div class="content ${p}"><div class="kicker"><b></b>${d.section}</div><h1>${d.title}</h1><div class="narration"><span class="typed"></span><span class="cursor"></span></div></div>
-<div class="panel"><div class="paneltop"><span>MODEL SIGNAL</span><span class="live">● LIVE</span></div><div class="signal">${d.signal}</div><div class="sub">${d.sub}</div><div class="nodes"><div class="node"><small>01</small><strong>${d.m1}</strong></div><div class="node"><small>02</small><strong>${d.m2}</strong></div><div class="node"><small>03</small><strong>${d.m3}</strong></div><div class="node"><small>04</small><strong>${d.m4}</strong></div></div></div>
+<div class="content ${p}"><div class="kicker"><b></b>${esc(d.section)}</div><h1>${esc(d.title)}</h1><div class="narration"><span class="typed"></span><span class="cursor"></span></div></div>
+<div class="panel"><div class="paneltop"><span>MODEL SIGNAL</span><span class="live">● LIVE</span></div><div class="signal">${esc(d.signal)}</div><div class="sub">${esc(d.sub)}</div><div class="nodes"><div class="node"><small>01</small><strong>${esc(d.m1)}</strong></div><div class="node"><small>02</small><strong>${esc(d.m2)}</strong></div><div class="node"><small>03</small><strong>${esc(d.m3)}</strong></div><div class="node"><small>04</small><strong>${esc(d.m4)}</strong></div></div></div>
 <div class="brain"><span></span><span></span><span></span><span></span><span></span></div><div class="scene">${String(i+1).padStart(2,"0")}</div>
 <div class="dots"><i class="dot"></i><i class="dot"></i><i class="dot"></i><i class="dot"></i></div>
-<div class="bottom"><span>AI / DATA / INTELLIGENCE</span><span>NODE ${String(i+1).padStart(2,"0")} // ${d.section}</span></div>`;return s}
+<div class="bottom"><span>AI / DATA / INTELLIGENCE</span><span>NODE ${String(i+1).padStart(2,"0")} // ${esc(d.section)}</span></div>`;return s}
+const introData={kicker:"ARTIFICIAL INTELLIGENCE / SERIES 01",title:"THE AGE OF INTELLIGENCE.",text:"MODELS • DATA • MACHINES • HUMAN CURIOSITY"};
+function esc(s){return String(s==null?"":s).replace(/&/g,"&amp;").replace(/"/g,"&quot;").replace(/</g,"&lt;").replace(/>/g,"&gt;")}
+function bg(u){return u?"background-image:url('"+String(u).replace(/'/g,"%27").replace(/"/g,"%22")+"')":""}
+function introTitle(t){const w=String(t||"").trim().split(/\s+/),last=w.pop()||"",k=Math.floor(w.length/2);const head=w.length>=3?[w.slice(0,k).join(" "),w.slice(k).join(" ")]:w.length?[w.join(" ")]:[];return head.map(esc).concat(`<span>${esc(last)}</span>`).join("<br>")}
+document.querySelector(".intro .introInner").innerHTML=`<div class="introK">${esc(introData.kicker)}</div><div class="introTitle">${introTitle(introData.title)}</div><div class="introSub">${esc(introData.text)}</div>`;
 aiData.forEach((d,i)=>story.appendChild(createSlide(d,i)));
 const duration=8000;
 function reset(s){clearInterval(s._timer);const t=s.querySelector(".typed"),b=s.querySelector(".bar");if(t)t.textContent="";if(b){b.style.transition="none";b.style.width="0"}}
-function activate(s){document.querySelectorAll(".slide").forEach(x=>x.classList.remove("active"));s.classList.add("active");reset(s);const i=Number(s.dataset.index);if(!Number.isNaN(i)){const d=aiData[i],t=s.querySelector(".typed"),b=s.querySelector(".bar");let n=0;s._timer=setInterval(()=>{if(n>=d.narration.length){clearInterval(s._timer);return}t.textContent+=d.narration[n++];},27);requestAnimationFrame(()=>requestAnimationFrame(()=>{b.style.transition="width "+duration+"ms linear";b.style.width="100%"}));s.querySelectorAll(".dot").forEach((x,j)=>x.classList.toggle("active",j===i))}else{const b=s.querySelector(".bar");requestAnimationFrame(()=>requestAnimationFrame(()=>{b.style.transition="width "+duration+"ms linear";b.style.width="100%"}))}}
-const observer=new IntersectionObserver(es=>es.forEach(e=>{if(e.isIntersecting)activate(e.target)}),{threshold:.65});document.querySelectorAll(".slide").forEach(s=>observer.observe(s));
+function activate(s,ms){const dur=ms||duration;document.querySelectorAll(".slide").forEach(x=>x.classList.remove("active"));s.classList.add("active");reset(s);const i=Number(s.dataset.index);if(!Number.isNaN(i)){const d=aiData[i],t=s.querySelector(".typed"),b=s.querySelector(".bar");let n=0;s._timer=setInterval(()=>{if(n>=d.narration.length){clearInterval(s._timer);return}t.textContent+=d.narration[n++];},27);requestAnimationFrame(()=>requestAnimationFrame(()=>{b.style.transition="width "+dur+"ms linear";b.style.width="100%"}));s.querySelectorAll(".dot").forEach((x,j)=>x.classList.toggle("active",j===i))}else{const b=s.querySelector(".bar");requestAnimationFrame(()=>requestAnimationFrame(()=>{b.style.transition="width "+dur+"ms linear";b.style.width="100%"}))}}
+const observer=new IntersectionObserver(es=>es.forEach(e=>{if(window.__engine&&window.__engine.driven)return;if(e.isIntersecting)activate(e.target)}),{threshold:.65});document.querySelectorAll(".slide").forEach(s=>observer.observe(s));
 document.addEventListener("keydown",e=>{const a=[...document.querySelectorAll(".slide")],c=a.findIndex(s=>s.classList.contains("active"));if(e.key==="ArrowDown")a[Math.min(c+1,a.length-1)].scrollIntoView({behavior:"smooth"});if(e.key==="ArrowUp")a[Math.max(c-1,0)].scrollIntoView({behavior:"smooth"})});
 activate(document.querySelector(".slide"));
+window.__engine={driven:false,count:document.querySelectorAll(".slide").length,goTo(i,ms){this.driven=true;ms=ms||8000;const s=document.querySelectorAll(".slide")[i];s.scrollIntoView({behavior:"instant",block:"start",inline:"start"});activate(s,ms)}};
 </script>
 </body>
 </html>

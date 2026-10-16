@@ -25,7 +25,13 @@ const slidesData = [
   }
 ];
 
+const introData={title:"श्रीमद्भगवद्गीता से जीवन के सूत्र",text:"एक विचार। एक सीख। एक नया दृष्टिकोण।"};
 const app=document.getElementById("app");
-function build(){app.innerHTML=`<section class="slide"><div class="progress"><div class="fill"></div></div><div class="frame"></div><div class="card"><div class="om">ॐ</div><div class="chapter">GEETA GYAAN</div><h1 class="title">श्रीमद्भगवद्गीता से जीवन के सूत्र</h1><p class="text">एक विचार। एक सीख। एक नया दृष्टिकोण।</p></div></section>`+slidesData.map((d,i)=>`<section class="slide"><div class="progress"><div class="fill"></div></div><div class="bg" style="background-image:url('${d.image}')"></div><div class="overlay"></div><div class="frame"></div><div class="card"><div class="om">ॐ</div><div class="chapter">${d.chapter}</div><h2 class="title">${d.title}</h2><p class="text">${d.text}</p></div></section>`).join("")}
-build();const io=new IntersectionObserver(es=>es.forEach(e=>{if(e.isIntersecting){document.querySelectorAll(".fill").forEach(x=>{x.style.transition="none";x.style.width="0"});const f=e.target.querySelector(".fill");if(f)requestAnimationFrame(()=>{f.style.transition="width 8s linear";f.style.width="100%"})}}),{root:app,threshold:.65});document.querySelectorAll(".slide").forEach(s=>io.observe(s));
+function esc(s){return String(s==null?"":s).replace(/&/g,"&amp;").replace(/"/g,"&quot;").replace(/</g,"&lt;").replace(/>/g,"&gt;")}
+function bg(u){return u?"background-image:url('"+String(u).replace(/'/g,"%27").replace(/"/g,"%22")+"')":""}
+function build(){app.innerHTML=`<section class="slide"><div class="progress"><div class="fill"></div></div><div class="frame"></div><div class="card"><div class="om">ॐ</div><div class="chapter">GEETA GYAAN</div><h1 class="title">${esc(introData.title)}</h1><p class="text">${esc(introData.text)}</p></div></section>`+slidesData.map((d,i)=>`<section class="slide"><div class="progress"><div class="fill"></div></div><div class="bg" style="${bg(d.image)}"></div><div class="overlay"></div><div class="frame"></div><div class="card"><div class="om">ॐ</div><div class="chapter">${esc(d.chapter)}</div><h2 class="title">${esc(d.title)}</h2><p class="text">${esc(d.text)}</p></div></section>`).join("")}
+function fillBar(s,ms,sel){document.querySelectorAll(sel).forEach(x=>{x.style.transition="none";x.style.width="0"});const f=s.querySelector(sel);if(f)requestAnimationFrame(()=>{f.style.transition="width "+ms+"ms linear";f.style.width="100%"})}
+function show(s,ms){fillBar(s,ms,".fill")}
+build();const io=new IntersectionObserver(es=>es.forEach(e=>{if(window.__engine&&window.__engine.driven)return;if(e.isIntersecting)show(e.target,8000)}),{root:app,threshold:.65});document.querySelectorAll(".slide").forEach(s=>io.observe(s));
+window.__engine={driven:false,count:document.querySelectorAll(".slide").length,goTo(i,ms){this.driven=true;ms=ms||8000;const s=document.querySelectorAll(".slide")[i];s.scrollIntoView({behavior:"instant",block:"start",inline:"start"});show(s,ms)}};
 </script></body></html>

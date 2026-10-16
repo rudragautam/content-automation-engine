@@ -157,7 +157,14 @@ def finish_connect(conn, state: str, code: str, base_url: str) -> int:
     if channel_id is None:
         # The same YouTube channel connected again just gets a fresh sign-in; its niche and times stay.
         existing = conn.execute("SELECT id FROM channels WHERE youtube_channel_id = ? AND is_mock = 0", (found["id"],)).fetchone()
-        channel_id = existing["id"] if existing else _insert_channel(conn, found["title"], pending["niche"], pending["slots"], found["handle"])
+        # A channel added by name for this niche and still waiting for its YouTube channel takes this sign-in.
+        waiting = conn.execute("SELECT id FROM channels WHERE is_mock = 0 AND niche = ? AND COALESCE(youtube_channel_id, '') = ''", (pending["niche"],)).fetchall()
+        if existing:
+            channel_id = existing["id"]
+        elif len(waiting) == 1:
+            channel_id = waiting[0]["id"]
+        else:
+            channel_id = _insert_channel(conn, found["title"], pending["niche"], pending["slots"], found["handle"])
     bind_channel(conn, channel_id, found)
     yt.save_credentials(creds, token_path(channel_id))
     return channel_id

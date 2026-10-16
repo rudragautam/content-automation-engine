@@ -3,6 +3,7 @@ import io
 import shutil
 import tempfile
 import unittest
+import unittest.mock
 
 from fastapi.testclient import TestClient
 
@@ -138,7 +139,9 @@ class TestScheduling(HubTestCase):
         self.assertIn("no slide content", self.client.post(f"/api/videos/{mock_video}/render").json()["error"])
         self.upload([get_spec("crime_files").example], channel_id=self._channel("crime_files"), niche="crime_files")
         crime = self.own_videos()[0]["id"]
-        self.assertIn("isn't built yet", self.client.post(f"/api/videos/{crime}/render").json()["error"])
+        self.assertTrue(queue.can_render("crime_files"))  # every niche renders now
+        with unittest.mock.patch("webapp.queue.can_render", return_value=False):
+            self.assertIn("isn't built yet", self.client.post(f"/api/videos/{crime}/render").json()["error"])
 
     def test_youtube_schedule_needs_a_rendered_video(self):
         self.upload([self.spec.example])

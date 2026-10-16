@@ -8,6 +8,7 @@ renders it to video on a frame-accurate timeline.
 import json
 import logging
 import os
+import re
 import uuid
 from abc import ABC, abstractmethod
 from dataclasses import asdict, dataclass, field
@@ -151,3 +152,12 @@ class TemplateWorkflow(ABC):
 def to_js_literal(value: Any) -> str:
     """JSON for embedding inside a <script> block."""
     return json.dumps(value, ensure_ascii=False).replace("</", "<\\/")
+
+
+def replace_const(html: str, name: str, value: str) -> str:
+    """Swap the value of a top-level `const name = {...};` or `const name = [...];` in the template script."""
+    pattern = rf"const\s+{name}\s*=\s*(?:\{{.*?\}}|\[.*?\])\s*;"
+    replaced, count = re.subn(pattern, lambda _: f"const {name}={value};", html, count=1, flags=re.DOTALL)
+    if count != 1:
+        raise ValueError(f"template is missing 'const {name}=...;'")
+    return replaced

@@ -110,13 +110,15 @@ def _error(res: httpx.Response) -> GeminiError:
 
 
 def pick_default_model(models: List[Dict[str, str]]) -> Optional[str]:
-    """Newest stable 'flash' model: fast and cheap, good for short structured scripts."""
-    def version(model_id: str):
-        m = re.match(r"gemini-(\d+)(?:\.(\d+))?-flash$", model_id)
+    """Newest stable Flash-Lite model: the cheapest that writes short structured scripts well
+    (and it doesn't spend tokens on thinking). Plain Flash is the fallback."""
+    def version(model_id: str, suffix: str):
+        m = re.match(rf"gemini-(\d+)(?:\.(\d+))?-{suffix}$", model_id)
         return (int(m.group(1)), int(m.group(2) or 0)) if m else None
 
-    stable = [(version(m["id"]), m["id"]) for m in models if version(m["id"])]
-    if stable:
-        return max(stable)[1]
+    for suffix in ("flash-lite", "flash"):
+        stable = [(version(m["id"], suffix), m["id"]) for m in models if version(m["id"], suffix)]
+        if stable:
+            return max(stable)[1]
     flash = [m["id"] for m in models if "flash" in m["id"] and not re.search(r"lite|image|tts|audio|live|embed|thinking", m["id"])]
     return flash[0] if flash else (models[0]["id"] if models else None)

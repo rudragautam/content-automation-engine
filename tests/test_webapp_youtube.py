@@ -96,6 +96,16 @@ class TestYouTubeConnection(HubTestCase):
             rows = conn.execute("SELECT id, niche, connection FROM channels WHERE youtube_channel_id = 'UCsci'").fetchall()
         self.assertEqual([tuple(r) for r in rows], [(row["id"], "science_quiz", "connected")])
 
+    def test_connect_from_settings_takes_the_waiting_channel_of_that_niche(self):
+        self.save_client()
+        waiting = self.real_channel("Science Sawaal (planned)")
+        with db.session() as conn:
+            conn.execute("UPDATE channels SET niche = 'science_quiz' WHERE id = ?", (waiting,))
+        self.sign_in_as({"id": "UCsci", "title": "Science Sawaal", "handle": "@sci", "subscribers": 1})
+        with db.session() as conn:
+            rows = conn.execute("SELECT id, name, connection, youtube_channel_id FROM channels WHERE is_mock = 0").fetchall()
+        self.assertEqual([tuple(r) for r in rows], [(waiting, "Science Sawaal (planned)", "connected", "UCsci")])
+
     def test_connect_from_settings_checks_input_and_cancel(self):
         self.assertIn("Upload your Google OAuth client file", self.client.post("/settings/connect", data={"niche": "focus_habits", "slots": "19:00"}).text)
         self.save_client()

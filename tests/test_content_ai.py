@@ -168,9 +168,10 @@ class TestGeminiClient(unittest.TestCase):
         with mock.patch.object(gemini, "RETRY_WAITS", (0, 0)):
             self.assertEqual(gemini.Gemini("k", transport=transport(lambda r: replies.pop(0))).list_models(), [])
 
-    def test_default_model_is_newest_stable_flash(self):
-        ids = ["gemini-2.0-flash", "gemini-2.5-flash", "gemini-2.5-flash-lite", "gemini-2.5-pro", "gemini-3-flash-preview"]
-        self.assertEqual(gemini.pick_default_model([{"id": i, "name": i} for i in ids]), "gemini-2.5-flash")
+    def test_default_model_is_newest_stable_flash_lite_then_flash(self):
+        ids = ["gemini-2.0-flash", "gemini-2.5-flash", "gemini-2.5-flash-lite", "gemini-2.0-flash-lite", "gemini-2.5-pro", "gemini-3-flash-preview"]
+        self.assertEqual(gemini.pick_default_model([{"id": i, "name": i} for i in ids]), "gemini-2.5-flash-lite")
+        self.assertEqual(gemini.pick_default_model([{"id": i, "name": i} for i in ids if "lite" not in i]), "gemini-2.5-flash")
         self.assertEqual(gemini.pick_default_model([{"id": "gemini-x-flash-preview", "name": ""}]), "gemini-x-flash-preview")
         self.assertIsNone(gemini.pick_default_model([]))
 

@@ -4,7 +4,8 @@ The page runs on Playwright's paused virtual clock and every CSS animation
 is paused and advanced manually, so each captured frame is exactly
 1/fps seconds after the previous one no matter how slow screenshots are.
 
-Templates must expose `window.__engine = {count, goTo(index)}`.
+Templates must expose `window.__engine = {count, goTo(index, ms)}`; `ms` is the
+slide's planned duration, for progress bars and timed reveals.
 """
 
 import logging
@@ -67,7 +68,7 @@ class TimelineRenderer:
                     raise RuntimeError(f"template has {slide_count} slides but {len(durations)} durations were planned")
 
                 for index, seconds in enumerate(durations):
-                    page.evaluate("i => window.__engine.goTo(i)", index)
+                    page.evaluate("([i, ms]) => window.__engine.goTo(i, ms)", [index, round(seconds * 1000)])
                     page.evaluate(_ADVANCE_ANIMATIONS, 0)
                     for _ in range(round(seconds * self.fps)):
                         n = len(frame_paths)

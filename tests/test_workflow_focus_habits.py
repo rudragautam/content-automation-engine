@@ -134,7 +134,7 @@ class TestWorkflowRegistry(unittest.TestCase):
     def test_lookup(self):
         self.assertTrue(has_workflow("01_Focus_Habits_Shorts_9x16"))
         self.assertIsInstance(get_workflow("01_Focus_Habits_Shorts_9x16"), FocusHabitsWorkflow)
-        self.assertFalse(has_workflow("02_Geeta_Gyaan_9x16"))
+        self.assertFalse(has_workflow("09_Finance_Base_16x9"))
 
 
 if __name__ == "__main__":

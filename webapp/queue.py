@@ -198,7 +198,7 @@ def start_render(conn, video_id: int) -> None:
     if not row["content_json"]:
         raise ActionError("This video has no slide content to render; upload it through a content sheet.")
     if not can_render(row["niche"]):
-        raise ActionError("Rendering for this template isn't built yet. Only Focus & Habits renders today.")
+        raise ActionError("Rendering for this template isn't built yet.")
     if row["status"] not in ("ready", "failed", "rendered"):
         raise ActionError(f"A {row['status']} video can't be rendered.")
     conn.execute("UPDATE videos SET status = 'rendering', error = NULL WHERE id = ?", (video_id,))
