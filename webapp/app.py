@@ -112,7 +112,7 @@ def channel_page(request: Request, channel_id: int, days: int = 28, notice: str 
             return Response("Channel not found", status_code=404)
         now = timeutil.fmt(timeutil.now_local())
         queue_rows = conn.execute(
-            "SELECT v.*, a.title audio_title FROM videos v LEFT JOIN audio a ON a.id = v.audio_id "
+            "SELECT v.*, a.title audio_title, u.filename source FROM videos v LEFT JOIN audio a ON a.id = v.audio_id LEFT JOIN uploads u ON u.id = v.upload_id "
             "WHERE v.channel_id = ? AND (v.status != 'published' OR v.publish_at > ?) ORDER BY v.publish_at", (channel_id, now)).fetchall()
         return page(
             request, "channel.html", days=days, channel=dict(channel),
@@ -511,8 +511,8 @@ def _upcoming(conn, hours: int, limit: int = 500, channel_id: int = None):
         where += " AND v.channel_id = ?"
         args.append(channel_id)
     rows = conn.execute(
-        f"SELECT v.id, v.title, v.status, v.publish_at, v.error, v.channel_id, v.content_json, v.is_mock, v.youtube_video_id, c.name channel_name, c.niche "
-        f"FROM videos v JOIN channels c ON c.id = v.channel_id WHERE {where} ORDER BY v.publish_at LIMIT ?", args + [limit]).fetchall()
+        f"SELECT v.id, v.title, v.status, v.publish_at, v.error, v.channel_id, v.content_json, v.is_mock, v.youtube_video_id, c.name channel_name, c.niche, u.filename source "
+        f"FROM videos v JOIN channels c ON c.id = v.channel_id LEFT JOIN uploads u ON u.id = v.upload_id WHERE {where} ORDER BY v.publish_at LIMIT ?", args + [limit]).fetchall()
     return [dict(r) for r in rows]
 
 
@@ -525,7 +525,8 @@ def _content_ctx(conn, niche: str):
     uploads = [dict(r) for r in conn.execute(
         "SELECT u.*, c.name channel_name FROM uploads u LEFT JOIN channels c ON c.id = u.channel_id WHERE u.niche = ? ORDER BY u.id DESC LIMIT 20", (niche,))]
     ready = [dict(r) for r in conn.execute(
-        "SELECT v.id, v.title, v.status, v.publish_at, v.error, v.channel_id, v.content_json, v.is_mock, v.youtube_video_id, c.name channel_name FROM videos v JOIN channels c ON c.id = v.channel_id "
+        "SELECT v.id, v.title, v.status, v.publish_at, v.error, v.channel_id, v.content_json, v.is_mock, v.youtube_video_id, c.name channel_name, u.filename source "
+        "FROM videos v JOIN channels c ON c.id = v.channel_id LEFT JOIN uploads u ON u.id = v.upload_id "
         "WHERE c.niche = ? AND v.status IN ('ready','rendering','rendered','failed') AND v.is_mock = 0 ORDER BY v.publish_at", (niche,))]
     return {
         "niches": [{"id": k, "name": s.name, "aspect": s.aspect_ratio, "pending": counts.get(k, 0), "renders": queue.can_render(k)} for k, s in NICHES.items()],

@@ -44,7 +44,7 @@
   </td>
   <td>
     <div class="cell-title clip" title="{{ v.title }}">{{ v.title }}</div>
-    <div class="cell-sub">{% if show_channel %}<a href="/channels/{{ v.channel_id }}">{{ v.channel_name }}</a> · {% endif %}{% if v.is_mock %}mock{% else %}from Excel{% endif %}{% if v.audio_title %} · ♪ {{ v.audio_title }}{% endif %}</div>
+    <div class="cell-sub">{% if show_channel %}<a href="/channels/{{ v.channel_id }}">{{ v.channel_name }}</a> · {% endif %}{% if v.is_mock %}mock{% elif v.source and v.source.startswith('Gemini: ') %}written by Gemini · {{ v.source[8:] }}{% elif v.source %}from {{ v.source }}{% else %}from YouTube{% endif %}{% if v.audio_title %} · ♪ {{ v.audio_title }}{% endif %}</div>
     {% if v.error %}<div class="cell-sub" style="color:var(--critical-ink)">{{ v.error }}</div>{% endif %}
   </td>
   <td>{{ status(v.status) }}</td>
