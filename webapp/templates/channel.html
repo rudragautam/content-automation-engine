@@ -1,0 +1,80 @@
+{% extends "base.html" %}
+{% from "_macros.html" import delta_short, connection, delta, range_filter, queue_row, status %}
+{% block title %}{{ channel.name }}{% endblock %}
+{% block content %}
+<div class="page-head">
+  <div>
+    <div class="muted" style="font-size:12.5px"><a href="/">All channels</a> /</div>
+    <h1>{{ channel.name }}</h1>
+    <div class="sub">{{ channel.handle }} · {{ niche_name(channel.niche) }} · {{ connection(channel.connection) }}</div>
+  </div>
+  <div class="filters">{{ range_filter(days, ranges, "/channels/" ~ channel.id ~ "?") }}</div>
+</div>
+
+{% if channel.connection != 'connected' %}
+<section class="card" style="margin-bottom:16px">
+  <h2>{{ 'Reconnect' if channel.connection == 'expired' else 'Connect' }} this channel to YouTube</h2>
+  <p class="secondary">{% if channel.connection == 'expired' %}YouTube's sign-in for this channel has expired or was revoked, so uploads are paused.{% else %}This channel isn't linked to YouTube yet, so nothing can be uploaded to it.{% endif %}</p>
+  <button class="btn primary" type="button" disabled title="Comes with the YouTube connection step">Connect with Google</button>
+  <span class="muted" style="margin-left:8px">Available once the Google Cloud OAuth client is set up.</span>
+</section>
+{% endif %}
+
+<div class="tiles">
+  <div class="tile"><div class="label">Subscribers</div><div class="value">{{ kpis.subscribers | compact }}</div><div class="delta">{{ kpis.net_subs | signed }} net in {{ days }} days</div></div>
+  <div class="tile"><div class="label">Views</div><div class="value">{{ kpis.views | compact }}</div>{{ delta(kpis.views_delta, days) }}</div>
+  <div class="tile"><div class="label">Watch hours</div><div class="value">{{ kpis.watch_hours | compact }}</div>{{ delta(kpis.watch_delta, days) }}</div>
+  <div class="tile"><div class="label">Net subscribers</div><div class="value">{{ kpis.net_subs | signed }}</div>{{ delta(kpis.subs_delta, days) }}</div>
+  <div class="tile"><div class="label">Videos published</div><div class="value">{{ kpis.published }}</div><div class="delta">in {{ days }} days</div></div>
+</div>
+
+<div class="grid cols-3">
+  <section class="card span-2">
+    <div class="card-head"><h2>Daily views</h2><span class="muted">last {{ days }} days</span></div>
+    <div class="chart" data-chart="line" data-src="views-data" data-label="Daily views for {{ channel.name }}"></div>
+    <script type="application/json" id="views-data">{{ series | tojson_safe }}</script>
+  </section>
+  <section class="card" data-slots="{{ channel.id }}">
+    <h2>Publish slots</h2>
+    <p class="secondary">New content from Excel fills these times in order, when a row has no publish time of its own.</p>
+    <div class="slot-list form-row" style="margin:10px 0">
+      {% for s in slots %}<input type="time" value="{{ s }}" aria-label="Publish slot">{% endfor %}
+    </div>
+    <div class="form-row">
+      <button class="btn small" data-action="add-slot" type="button">Add slot</button>
+      <button class="btn small primary" data-action="save-slots" type="button">Save slots</button>
+    </div>
+    <p class="muted" style="margin-top:10px;font-size:12px">Clear a time to remove that slot, then save.</p>
+  </section>
+</div>
+
+<section class="card section" id="queue">
+  <div class="card-head"><h2>Queue and schedule</h2><a href="/content?niche={{ channel.niche }}">Add content</a></div>
+  {% if queue %}
+  <div class="table-wrap"><table>
+    <thead><tr><th>Publish time</th><th>Video</th><th>Status</th><th class="r">Actions</th></tr></thead>
+    <tbody>{% for v in queue %}{{ queue_row(v, false, can_render) }}{% endfor %}</tbody>
+  </table></div>
+  {% else %}<div class="empty">Nothing queued. <a href="/content?niche={{ channel.niche }}">Upload a content sheet</a> to fill this channel's slots.</div>{% endif %}
+</section>
+
+<div class="grid cols-2 section">
+  <section class="card">
+    <div class="card-head"><h2>Top videos</h2><span class="muted">last {{ days }} days</span></div>
+    {% if top %}
+    <div class="table-wrap"><table>
+      <thead><tr><th>Video</th><th class="r">Views</th><th class="r">Avg viewed</th><th class="r">Likes</th></tr></thead>
+      <tbody>{% for v in top %}
+        <tr><td><div class="cell-title clip" title="{{ v.title }}">{{ v.title }}</div><div class="cell-sub">{{ v.publish_at | when }}</div></td>
+        <td class="r num">{{ v.views | compact }}</td><td class="r num">{{ '%.0f' % v.avg_view_pct }}%</td><td class="r num">{{ v.likes | compact }}</td></tr>
+      {% endfor %}</tbody>
+    </table></div>
+    {% else %}<div class="empty">No published videos in this period.</div>{% endif %}
+  </section>
+  <section class="card">
+    <div class="card-head"><h2>When videos do best</h2><span class="muted">avg views per video, last 90 days</span></div>
+    <div class="chart" data-chart="heatmap" data-src="heat-data"></div>
+    <script type="application/json" id="heat-data">{{ heatmap | tojson_safe }}</script>
+  </section>
+</div>
+{% endblock %}

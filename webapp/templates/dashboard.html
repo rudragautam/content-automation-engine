@@ -1,0 +1,91 @@
+{% extends "base.html" %}
+{% from "_macros.html" import delta_short, connection, delta, range_filter, status %}
+{% block title %}Dashboard{% endblock %}
+{% block content %}
+<div class="page-head">
+  <div>
+    <h1>All channels</h1>
+    <div class="sub">{{ channels | length }} channels · last {{ days }} days</div>
+  </div>
+  <div class="filters">{{ range_filter(days, ranges, "/?") }}</div>
+</div>
+
+<div class="tiles">
+  <div class="tile"><div class="label">Subscribers</div><div class="value">{{ kpis.subscribers | compact }}</div><div class="delta">{{ kpis.net_subs | signed }} net in {{ days }} days</div></div>
+  <div class="tile"><div class="label">Views</div><div class="value">{{ kpis.views | compact }}</div>{{ delta(kpis.views_delta, days) }}</div>
+  <div class="tile"><div class="label">Watch hours</div><div class="value">{{ kpis.watch_hours | compact }}</div>{{ delta(kpis.watch_delta, days) }}</div>
+  <div class="tile"><div class="label">Videos published</div><div class="value">{{ kpis.published | compact }}</div><div class="delta">in {{ days }} days</div></div>
+  <div class="tile">
+    <div class="label">YouTube API quota today</div>
+    <div class="value">{{ quota.pct }}%</div>
+    <div class="meter {{ 'danger' if quota.pct >= 90 else 'warn' if quota.pct >= 60 }}" role="meter" aria-valuenow="{{ quota.used }}" aria-valuemax="{{ quota.limit }}" aria-label="Quota used"><span style="width:{{ [quota.pct, 100] | min }}%"></span></div>
+    <div class="delta">about {{ quota.uploads_left }} more uploads today</div>
+  </div>
+</div>
+
+<div class="grid cols-3">
+  <section class="card span-2">
+    <div class="card-head"><h2>Daily views, all channels</h2><span class="muted">last {{ days }} days</span></div>
+    <div class="chart" data-chart="line" data-src="series-data" data-label="Daily views across all channels"></div>
+    <script type="application/json" id="series-data">{{ series | tojson_safe }}</script>
+  </section>
+  <section class="card">
+    <div class="card-head"><h2>Needs attention</h2><span class="muted">{{ alerts | length + (1 if low_queue else 0) }}</span></div>
+    <div class="alerts">
+      {% for a in alerts %}
+      <div class="alert {{ a.level }}"><span class="i">{{ '!' if a.level == 'critical' else '–' }}</span><span>{{ a.text }}</span><a href="{{ a.href }}">Open</a></div>
+      {% endfor %}
+      {% if low_queue %}
+      <div class="alert warning"><span class="i">–</span><span>{{ low_queue | length }} channel{{ '' if low_queue | length == 1 else 's' }} have under 3 days of videos queued:
+        {% for c in low_queue %}<a href="/channels/{{ c.id }}" style="margin:0;font-weight:500">{{ c.name }}</a> ({{ c.covered_days }}d){{ ', ' if not loop.last }}{% endfor %}.</span><a href="/content">Add</a></div>
+      {% endif %}
+      {% if not alerts and not low_queue %}<div class="empty">Nothing needs attention.</div>{% endif %}
+    </div>
+  </section>
+</div>
+
+<section class="card section" id="channels">
+  <div class="card-head"><h2>Channels</h2><span class="muted">sorted by subscribers</span></div>
+  <div class="table-wrap">
+    <table>
+      <thead><tr>
+        <th>Channel</th><th>Connection</th><th class="r">Subscribers</th><th class="r">Views ({{ days }}d)</th><th class="r">Change</th>
+        <th>Views, 28 days</th><th class="r">Watch hours</th><th>Next publish</th><th>Queue</th>
+      </tr></thead>
+      <tbody>
+      {% for c in channels %}
+        <tr>
+          <td><a class="cell-title" href="/channels/{{ c.id }}">{{ c.name }}</a><div class="cell-sub">{{ c.handle }} · {{ c.niche_name }}</div></td>
+          <td>{{ connection(c.connection) }}</td>
+          <td class="r num">{{ c.subscribers | compact }}</td>
+          <td class="r num">{{ c.views | compact }}</td>
+          <td class="r num">{{ delta_short(c.views_delta) }}</td>
+          <td><span data-spark="{{ c.spark | tojson }}"></span></td>
+          <td class="r num">{{ c.watch_hours | compact }}</td>
+          <td class="num">{{ c.next_publish | when }}</td>
+          <td>{% if c.connection != 'connected' %}<span class="muted">—</span>{% elif c.covered_days < 3 %}<span class="chip warning"><span class="i">!</span>{{ c.covered_days }} day{{ '' if c.covered_days == 1 else 's' }}</span>{% else %}<span class="secondary">{{ c.covered_days }} days</span>{% endif %}</td>
+        </tr>
+      {% endfor %}
+      </tbody>
+    </table>
+  </div>
+</section>
+
+<div class="grid cols-2 section">
+  <section class="card">
+    <div class="card-head"><h2>Views by niche</h2><span class="muted">last {{ days }} days</span></div>
+    <div class="chart" data-chart="bars" data-src="niche-data"></div>
+    <script type="application/json" id="niche-data">{{ by_niche | tojson_safe }}</script>
+  </section>
+  <section class="card">
+    <div class="card-head"><h2>Up next</h2><a href="/schedule">Full schedule</a></div>
+    {% if upcoming %}
+    <div class="table-wrap"><table><tbody>
+      {% for v in upcoming %}
+      <tr><td class="num" style="white-space:nowrap">{{ v.publish_at | when }}</td><td><div class="cell-title clip" title="{{ v.title }}">{{ v.title }}</div><div class="cell-sub"><a href="/channels/{{ v.channel_id }}">{{ v.channel_name }}</a></div></td><td>{{ status(v.status) }}</td></tr>
+      {% endfor %}
+    </tbody></table></div>
+    {% else %}<div class="empty">Nothing scheduled in the next 48 hours.</div>{% endif %}
+  </section>
+</div>
+{% endblock %}

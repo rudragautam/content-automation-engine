@@ -8,3 +8,12 @@ openpyxl
 imageio-ffmpeg
 playwright>=1.45
 pillow
+
+# Content hub web app (python -m webapp)
+fastapi
+uvicorn
+jinja2
+python-multipart
+tzdata
+# Test client for the web app tests
+httpx

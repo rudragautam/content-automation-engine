@@ -1,0 +1,72 @@
+{% macro status(s) -%}
+{%- set map = {
+  'ready': ('', '○', 'Content ready'),
+  'rendering': ('accent spin', '', 'Rendering'),
+  'rendered': ('accent', '▶', 'Rendered'),
+  'scheduled': ('accent', '◷', 'Scheduled'),
+  'published': ('good', '✓', 'Published'),
+  'failed': ('critical', '✕', 'Failed')} -%}
+{%- set c = map.get(s, ('', '•', s)) -%}
+<span class="chip {{ c[0] }}"><span class="i">{{ c[1] }}</span>{{ c[2] }}</span>
+{%- endmacro %}
+
+{% macro connection(s) -%}
+{%- set map = {'connected': ('good', '✓', 'Connected'), 'expired': ('critical', '!', 'Sign-in expired'), 'not_connected': ('warning', '–', 'Not connected')} -%}
+{%- set c = map.get(s, ('', '•', s)) -%}
+<span class="chip {{ c[0] }}"><span class="i">{{ c[1] }}</span>{{ c[2] }}</span>
+{%- endmacro %}
+
+{% macro delta(value, days) -%}
+{%- if value is none -%}<span class="delta">No earlier data</span>
+{%- else -%}<span class="delta {{ 'up' if value > 0 else 'down' if value < 0 }}">{{ '▲' if value > 0 else '▼' if value < 0 else '' }} {{ '%+.1f' % value if (value | round(1)) else '0.0' }}% <span class="muted">vs previous {{ days }} days</span></span>
+{%- endif -%}
+{%- endmacro %}
+
+{% macro range_filter(days, ranges, base) -%}
+<div class="seg" role="group" aria-label="Date range">
+  {% for r in ranges %}<a href="{{ base }}days={{ r }}" class="{{ 'on' if r == days }}" {% if r == days %}aria-current="true"{% endif %}>Last {{ r }} days</a>{% endfor %}
+</div>
+{%- endmacro %}
+
+{% macro queue_row(v, show_channel=false, can_render=false) -%}
+<tr data-video="{{ v.id }}" data-status="{{ v.status }}">
+  <td style="min-width:190px">
+    <span class="when-text num">{{ v.publish_at | when }}</span>
+    {% if v.status in ('ready', 'rendered', 'scheduled', 'failed') %}
+    <button class="btn small edit-btn" data-action="edit-time" type="button" aria-label="Change publish time">Edit</button>
+    <span class="inline-edit">
+      <input type="datetime-local" value="{{ v.publish_at }}" aria-label="New publish time">
+      <button class="btn small primary" data-action="save-time" type="button">Save</button>
+      <button class="btn small" data-action="cancel-time" type="button">Cancel</button>
+    </span>
+    {% endif %}
+  </td>
+  <td>
+    <div class="cell-title clip" title="{{ v.title }}">{{ v.title }}</div>
+    <div class="cell-sub">{% if show_channel %}<a href="/channels/{{ v.channel_id }}">{{ v.channel_name }}</a> · {% endif %}{% if v.is_mock %}mock{% else %}from Excel{% endif %}{% if v.audio_title %} · ♪ {{ v.audio_title }}{% endif %}</div>
+    {% if v.error %}<div class="cell-sub" style="color:var(--critical-ink)">{{ v.error }}</div>{% endif %}
+  </td>
+  <td>{{ status(v.status) }}</td>
+  <td>
+    <div class="actions">
+      {% if v.status in ('ready', 'failed') and v.content_json is defined and v.content_json %}
+        <button class="btn small primary" data-action="render" type="button" {% if not can_render %}disabled title="Rendering for this template isn't built yet"{% endif %}>Render</button>
+      {% endif %}
+      {% if v.status == 'rendered' %}
+        <a class="btn small" href="/media/video/{{ v.id }}" target="_blank" rel="noopener">Preview</a>
+        <button class="btn small primary" data-action="youtube" type="button">Schedule on YouTube</button>
+      {% endif %}
+      {% if v.status not in ('published', 'rendering') %}
+        <button class="btn small danger" data-action="delete-video" type="button" aria-label="Remove from queue">Remove</button>
+      {% endif %}
+    </div>
+  </td>
+</tr>
+{%- endmacro %}
+
+{% macro delta_short(value) -%}
+{%- if value is none -%}<span class="muted">—</span>
+{%- else -%}{%- set r = value | round(0) | int -%}
+<span class="delta {{ 'up' if r > 0 else 'down' if r < 0 }}">{{ '▲ ' if r > 0 else '▼ ' if r < 0 }}{{ '%+d' % r if r else '0' }}%</span>
+{%- endif -%}
+{%- endmacro %}

@@ -1,0 +1,85 @@
+{% extends "base.html" %}
+{% from "_macros.html" import queue_row %}
+{% block title %}Content{% endblock %}
+{% block content %}
+<div class="page-head">
+  <div>
+    <h1>Content</h1>
+    <div class="sub">Download a niche's Excel template, fill it yourself or with an AI tool, and upload it to queue the videos.</div>
+  </div>
+</div>
+
+<nav class="pill-list" aria-label="Niches" style="margin-bottom:16px">
+  {% for n in niches %}<a class="pill {{ 'on' if n.id == niche }}" href="/content?niche={{ n.id }}">{{ n.name }}{% if n.pending %}<span class="count">{{ n.pending }}</span>{% endif %}</a>{% endfor %}
+</nav>
+
+<div class="grid cols-2">
+  <section class="card">
+    <h2>1. Download the template</h2>
+    <dl class="kv" style="margin-bottom:12px">
+      <dt>Template</dt><dd>{{ spec.template_id }} ({{ spec.aspect_ratio }})</dd>
+      <dt>Each video</dt><dd>an intro slide and {{ items_text }}</dd>
+      <dt>Language</dt><dd>{{ spec.language }}</dd>
+      <dt>Video render</dt><dd>{% if can_render %}<span class="chip good"><span class="i">✓</span>Available</span>{% else %}<span class="chip warning"><span class="i">–</span>Not built yet</span> <span class="muted">content can be queued now</span>{% endif %}</dd>
+    </dl>
+    <a class="btn primary" href="/content/{{ niche }}/template.xlsx">Download {{ spec.name }} template</a>
+    <ol class="steps" style="margin-top:14px">
+      <li>Open the <strong>AI Prompt</strong> sheet, copy it, and fill in the number of videos and the topic.</li>
+      <li>Give the prompt and the file to Gemini or any other AI tool.</li>
+      <li>Put its rows in the <strong>Content</strong> sheet (paste a table at cell A1).</li>
+      <li>Upload the file here.</li>
+    </ol>
+  </section>
+
+  <section class="card">
+    <h2>2. Upload the filled sheet</h2>
+    {% if channels %}
+    <form method="post" action="/content/{{ niche }}/upload" enctype="multipart/form-data" class="form-row">
+      <label class="field">Channel
+        <select name="channel_id" required>
+          {% for c in channels %}<option value="{{ c.id }}" {{ 'selected' if result and result.channel_id == c.id }}>{{ c.name }}{{ '' if c.connection == 'connected' else ' (not connected)' }}</option>{% endfor %}
+        </select>
+      </label>
+      <label class="field">Excel file (.xlsx)
+        <input type="file" name="file" accept=".xlsx" required>
+      </label>
+      <button class="btn primary" type="submit">Upload and check</button>
+    </form>
+    <p class="muted" style="margin-top:10px;font-size:12.5px">Nothing is added unless every row passes. Rows without a publish time fill the channel's next free slots.</p>
+    {% else %}<div class="empty">No channel uses this niche yet.</div>{% endif %}
+
+    {% if upload_error %}<div class="notice bad" style="margin-top:12px">{{ upload_error }}</div>{% endif %}
+    {% if result %}
+      {% if result.ok %}
+      <div class="notice ok" style="margin-top:12px"><strong>{{ result.videos }} video{{ '' if result.videos == 1 else 's' }} queued</strong> from {{ result.filename }}.</div>
+      {% else %}
+      <div class="notice bad" style="margin-top:12px"><strong>{{ result.errors | length }} problem{{ '' if result.errors | length == 1 else 's' }} in {{ result.filename }}.</strong> Nothing was added; fix these and upload again.</div>
+      <div class="table-wrap" style="max-height:320px;overflow-y:auto"><table>
+        <thead><tr><th class="r">Row</th><th>Column</th><th>Problem</th></tr></thead>
+        <tbody>{% for e in result.errors %}<tr><td class="r num">{{ e.row or '—' }}</td><td><code>{{ e.column or '—' }}</code></td><td>{{ e.message }}</td></tr>{% endfor %}</tbody>
+      </table></div>
+      {% endif %}
+    {% endif %}
+  </section>
+</div>
+
+<section class="card section">
+  <div class="card-head"><h2>Uploaded content waiting for render or upload</h2><span class="muted">{{ ready | length }}</span></div>
+  {% if ready %}
+  <div class="table-wrap"><table>
+    <thead><tr><th>Publish time</th><th>Video</th><th>Status</th><th class="r">Actions</th></tr></thead>
+    <tbody>{% for v in ready %}{{ queue_row(v, true, can_render) }}{% endfor %}</tbody>
+  </table></div>
+  {% else %}<div class="empty">Nothing waiting. Uploaded rows appear here until they're scheduled on YouTube.</div>{% endif %}
+</section>
+
+<section class="card section">
+  <div class="card-head"><h2>Upload history</h2></div>
+  {% if uploads %}
+  <div class="table-wrap"><table>
+    <thead><tr><th>File</th><th>Channel</th><th class="r">Videos</th><th>Uploaded</th></tr></thead>
+    <tbody>{% for u in uploads %}<tr><td>{{ u.filename }}</td><td>{{ u.channel_name or '—' }}</td><td class="r num">{{ u.videos_added }}</td><td class="num">{{ u.uploaded_at | when }}</td></tr>{% endfor %}</tbody>
+  </table></div>
+  {% else %}<div class="empty">No uploads for this niche yet.</div>{% endif %}
+</section>
+{% endblock %}
