@@ -1,0 +1,15 @@
+{
+  "intro": {
+    "kicker": "DAILY MINDSET",
+    "title": "5 Daily Habits That Ruin Your Focus",
+    "text": "Some habits quietly destroy your concentration without you noticing.",
+    "micro": "WATCH TILL THE END"
+  },
+  "slides": [
+    {"title": "📱 PHONE CHECKING", "text": "Checking your phone every few minutes destroys deep focus before it even begins."},
+    {"title": "🔔 CONSTANT NOTIFICATIONS", "text": "Every ping forces your brain to switch context, making simple work take much longer."},
+    {"title": "🌙 POOR SLEEP", "text": "When sleep is consistently low, attention, memory and decision-making all suffer."},
+    {"title": "🧠 MULTITASKING", "text": "Doing several things at once feels productive, but your brain is repeatedly paying a switching cost."},
+    {"title": "🍩 SUGAR CRASHES", "text": "Quick sugar gives a short spike of energy, then leaves you foggy and distracted."}
+  ]
+}

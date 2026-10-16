@@ -2,7 +2,7 @@
 
 import logging
 import os
-from typing import Optional
+from typing import Optional, Tuple
 
 from templates.metadata import TemplateMetadata
 from templates.exceptions import TemplateNotFoundError, TemplateUnavailableError

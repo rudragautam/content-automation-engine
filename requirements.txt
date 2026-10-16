@@ -2,5 +2,7 @@
 feedparser
 
 # Video rendering dependencies
+# After installing, also run: python -m playwright install chromium
 imageio-ffmpeg
-playwright
+playwright>=1.45
+pillow

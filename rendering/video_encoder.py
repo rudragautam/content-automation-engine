@@ -3,6 +3,7 @@
 import subprocess
 import logging
 import os
+import re
 import tempfile
 import shutil
 from typing import Optional, List, Tuple
@@ -63,7 +64,7 @@ class FFmpegEncoder:
                 "-f", "image2pipe",
                 "-r", str(self.fps),
                 "-i", "-",
-                "-vf", f"scale={width}:{height}",
+                "-vf", f"scale={width}:{height}:out_range=tv,format=yuv420p",
                 "-c:v", "libx264",
                 "-pix_fmt", "yuv420p",
                 "-preset", "fast",
@@ -113,9 +114,20 @@ class FFmpegEncoder:
             if "Video:" in line:
                 metadata["video_info"] = line.strip()
                 break
+        match = re.search(r"Duration:\s*(\d+):(\d+):(\d+(?:\.\d+)?)", output)
+        if match:
+            hours, minutes, seconds = match.groups()
+            metadata["duration"] = int(hours) * 3600 + int(minutes) * 60 + float(seconds)
         return metadata
 
-    def validate(self, video_path: str, expected_width: int = None, expected_height: int = None) -> dict:
+    def validate(
+        self,
+        video_path: str,
+        expected_width: int = None,
+        expected_height: int = None,
+        expected_duration: float = None,
+        duration_tolerance: float = 0.1,
+    ) -> dict:
         if not os.path.isfile(video_path):
             return {"valid": False, "error": "Video file does not exist"}
         size = os.path.getsize(video_path)
@@ -135,4 +147,9 @@ class FFmpegEncoder:
             if expected_height and str(expected_height) not in info:
                 result["valid"] = False
                 result["error"] = f"Height mismatch: expected {expected_height}, got {info}"
+        if expected_duration is not None:
+            actual = metadata.get("duration")
+            if actual is None or abs(actual - expected_duration) > duration_tolerance:
+                result["valid"] = False
+                result["error"] = f"Duration mismatch: expected {expected_duration}s, got {actual}s"
         return result

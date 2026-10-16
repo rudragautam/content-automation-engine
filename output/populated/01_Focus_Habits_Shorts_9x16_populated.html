@@ -17,6 +17,7 @@ h1,h2{margin:0;line-height:1.05}h1{font-size:clamp(34px,8vw,64px);text-transform
 </style></head>
 <body><main class="shorts-container" id="app"></main>
 <script>
+const introData={kicker:"DAILY MINDSET",title:"5 Daily Habits That Ruin Your Focus",text:"Some habits quietly destroy your concentration without you noticing.",micro:"↑ SWIPE UP TO START",duration:4};
 const slidesData = [
   {
     "title": "Test",
@@ -25,11 +26,15 @@ const slidesData = [
 ];
 
 const app=document.getElementById("app");
-function intro(){return `<section class="slide intro"><div class="progress"><div class="progress-fill"></div></div><div class="watermark">01</div><div class="card"><div class="kicker">DAILY MINDSET</div><h1>5 Daily Habits That Ruin Your Focus</h1><p>Some habits quietly destroy your concentration without you noticing.</p><div class="micro">↑ SWIPE UP TO START</div></div></section>`}
-function fact(d,i){return `<section class="slide"><div class="progress"><div class="progress-fill"></div></div><div class="watermark">${String(i+1).padStart(2,"0")}</div><div class="card"><div class="kicker">HABIT ${i+1}</div><h2>${d.title}</h2><p class="type" data-text="${esc(d.text)}"></p></div></section>`}
+const DEFAULT_DURATION=5.5;
+function dur(d){return (Number(d&&d.duration)||DEFAULT_DURATION)*1000}
+function intro(){return `<section class="slide intro" data-dur="${dur(introData)}"><div class="progress"><div class="progress-fill"></div></div><div class="watermark">01</div><div class="card"><div class="kicker">${esc(introData.kicker)}</div><h1>${esc(introData.title)}</h1><p>${esc(introData.text)}</p><div class="micro">${esc(introData.micro)}</div></div></section>`}
+function fact(d,i){return `<section class="slide" data-dur="${dur(d)}"><div class="progress"><div class="progress-fill"></div></div><div class="watermark">${String(i+1).padStart(2,"0")}</div><div class="card"><div class="kicker">HABIT ${i+1}</div><h2>${d.title}</h2><p class="type" data-text="${esc(d.text)}"></p></div></section>`}
 function esc(s){return String(s).replace(/&/g,"&amp;").replace(/"/g,"&quot;").replace(/</g,"&lt;").replace(/>/g,"&gt;")}
-function build(){app.innerHTML=intro()+slidesData.map(fact).join("")}
+function build(){document.title=introData.title;app.innerHTML=intro()+slidesData.map(fact).join("")}
 function reset(s){clearInterval(s._tw);const f=s.querySelector(".progress-fill");if(f){f.style.transition="none";f.style.width="0"}const t=s.querySelector(".type");if(t)t.innerHTML=""}
-function activate(s){document.querySelectorAll(".slide").forEach(reset);s.classList.add("active");const f=s.querySelector(".progress-fill");if(f)requestAnimationFrame(()=>{f.style.transition=`width ${5500}ms linear`;f.style.width="100%"});const t=s.querySelector(".type");if(t){let i=0;const text=t.dataset.text;t.innerHTML="";const c=document.createElement("span");c.className="cursor";t.append(c);s._tw=setInterval(()=>{if(i>=text.length)return clearInterval(s._tw);c.before(document.createTextNode(text[i++]));},28)}}
-build();const io=new IntersectionObserver(es=>es.forEach(e=>{if(e.isIntersecting&&e.intersectionRatio>.65)activate(e.target)}),{root:app,threshold:.65});document.querySelectorAll(".slide").forEach(s=>io.observe(s));activate(document.querySelector(".slide"));
+function activate(s){document.querySelectorAll(".slide").forEach(reset);s.classList.add("active");const f=s.querySelector(".progress-fill");if(f)requestAnimationFrame(()=>{f.style.transition=`width ${s.dataset.dur}ms linear`;f.style.width="100%"});const t=s.querySelector(".type");if(t){let i=0;const text=t.dataset.text;t.innerHTML="";const c=document.createElement("span");c.className="cursor";t.append(c);s._tw=setInterval(()=>{if(i>=text.length)return clearInterval(s._tw);c.before(document.createTextNode(text[i++]));},28)}}
+build();const io=new IntersectionObserver(es=>es.forEach(e=>{if(window.__engine.driven)return;if(e.isIntersecting&&e.intersectionRatio>.65)activate(e.target)}),{root:app,threshold:.65});document.querySelectorAll(".slide").forEach(s=>io.observe(s));
+window.__engine={driven:false,count:document.querySelectorAll(".slide").length,goTo(i){this.driven=true;const s=document.querySelectorAll(".slide")[i];app.scrollTo({top:s.offsetTop,behavior:"instant"});activate(s)}};
+activate(document.querySelector(".slide"));
 </script></body></html>

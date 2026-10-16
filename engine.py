@@ -107,6 +107,16 @@ def parse_args(args=None):
         help="Number of scenes to capture (default: 6)",
     )
     parser.add_argument(
+        "--input",
+        default=None,
+        help="Content JSON file for templates with their own workflow",
+    )
+    parser.add_argument(
+        "--no-render",
+        action="store_true",
+        help="With --input: write populated HTML and timeline only, skip video",
+    )
+    parser.add_argument(
         "-v",
         "--verbose",
         action="store_true",
@@ -154,6 +164,25 @@ def build_config(args) -> RunConfig:
     )
 
 
+def run_workflow(parsed):
+    from workflows.registry import get_workflow, has_workflow
+
+    template_id = parsed.template[:-5] if parsed.template.endswith(".html") else parsed.template
+    if not has_workflow(template_id):
+        print(json.dumps({"success": False, "error": f"No workflow for template '{parsed.template}'"}))
+        sys.exit(1)
+    with open(parsed.input, "r", encoding="utf-8") as f:
+        content = json.load(f)
+    result = get_workflow(template_id).run(
+        content,
+        output_dir=parsed.output,
+        render=not parsed.no_render,
+        fps=parsed.fps,
+    )
+    print(json.dumps(result, indent=2, ensure_ascii=False, default=str))
+    sys.exit(0 if result.get("success") else 1)
+
+
 def main(args=None):
     parsed = parse_args(args)
     if parsed.verbose:
@@ -176,6 +205,9 @@ def main(args=None):
         result = vor.run()
         print(json.dumps(result, indent=2, default=str))
         sys.exit(0 if result.get("success") else 1)
+
+    if parsed.input:
+        run_workflow(parsed)
 
     config = build_config(parsed)
     registry = TemplateRegistry()

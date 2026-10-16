@@ -1,7 +1,7 @@
 """Template registry."""
 
 import logging
-from typing import Dict, List, Optional, Tuple
+from typing import Any, Dict, List, Optional, Tuple
 
 from templates.metadata import TemplateMetadata
 from templates.exceptions import (
