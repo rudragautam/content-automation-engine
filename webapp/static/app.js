@@ -53,9 +53,26 @@ document.addEventListener("click", async (e) => {
       toast("Rendering started. This takes about a minute.");
       poll(id, row);
     } else if (action === "youtube") {
-      await post(`/api/videos/${id}/youtube`);
-      toast("Scheduled on YouTube (mock)");
-      setTimeout(() => location.reload(), 600);
+      btn.disabled = true;
+      const res = await post(`/api/videos/${id}/youtube`);
+      if (res.status === "uploading") {
+        setStatus(row, "uploading");
+        toast("Uploading to YouTube…");
+        poll(id, row);
+      } else {
+        toast("Scheduled (mock channel, nothing uploaded)");
+        setTimeout(() => location.reload(), 600);
+      }
+    } else if (action === "sync") {
+      btn.disabled = true;
+      toast("Syncing from YouTube…");
+      const res = await post(`/api/channels/${btn.dataset.channel}/sync`);
+      toast(`Synced ${res.days} days of stats and ${res.videos} videos`);
+      setTimeout(() => location.reload(), 900);
+    } else if (action === "disconnect") {
+      if (!confirm("Disconnect this channel? Uploads stop until you connect it again.")) return;
+      await post(`/api/channels/${btn.dataset.channel}/disconnect`);
+      location.reload();
     } else if (action === "delete-video") {
       if (!confirm("Remove this video from the queue?")) return;
       await post(`/api/videos/${id}/delete`);
@@ -87,6 +104,8 @@ document.addEventListener("click", async (e) => {
 const STATUS = {
   rendering: ["accent spin", "", "Rendering"],
   rendered: ["accent", "▶", "Rendered"],
+  uploading: ["accent spin", "", "Uploading"],
+  scheduled: ["accent", "◷", "Scheduled"],
   failed: ["critical", "✕", "Failed"],
 };
 function setStatus(row, status) {
@@ -101,10 +120,17 @@ function setStatus(row, status) {
 async function poll(id, row) {
   const res = await fetch(`/api/videos/${id}`).then((r) => r.json());
   if (res.status === "rendering") return setTimeout(() => poll(id, row), 3000);
+  if (res.status === "uploading") {
+    const chip = row.querySelector(".chip");
+    if (chip) chip.lastChild.textContent = `Uploading ${Math.round(res.upload_progress || 0)}%`;
+    return setTimeout(() => poll(id, row), 2000);
+  }
   setStatus(row, res.status);
-  toast(res.status === "rendered" ? "Video rendered" : `Render failed: ${res.error || ""}`);
+  if (res.status === "scheduled") toast("Uploaded and scheduled on YouTube");
+  else if (res.error) toast(res.error);
+  else toast(res.status === "rendered" ? "Video rendered" : `Status: ${res.status}`);
   setTimeout(() => location.reload(), 900);
 }
-document.querySelectorAll("[data-video][data-status=rendering]").forEach((row) => poll(row.dataset.video, row));
+document.querySelectorAll("[data-video][data-status=rendering], [data-video][data-status=uploading]").forEach((row) => poll(row.dataset.video, row));
 
 mountAll();

@@ -51,8 +51,10 @@ DAYS = 90
 
 
 def seed(conn, now: dt.datetime = None) -> None:
-    """Fill an empty database with mock data. Does nothing if channels exist."""
-    if conn.execute("SELECT COUNT(*) FROM channels").fetchone()[0]:
+    """Fill an empty database with mock data. Does nothing if channels exist or mock data was removed."""
+    from webapp.db import get_setting
+
+    if conn.execute("SELECT COUNT(*) FROM channels").fetchone()[0] or get_setting(conn, "mock_removed"):
         return
     rng = random.Random(7)
     now = now or timeutil.now_local()

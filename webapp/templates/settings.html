@@ -1,0 +1,85 @@
+{% extends "base.html" %}
+{% from "_macros.html" import connection %}
+{% block title %}Settings{% endblock %}
+{% block content %}
+<div class="page-head">
+  <div>
+    <h1>Settings</h1>
+    <div class="sub">Connect the hub to YouTube, add your real channels and clear the mock data.</div>
+  </div>
+</div>
+{% if notice %}<div class="notice ok">{{ notice }}</div>{% endif %}
+{% if problem %}<div class="notice bad">{{ problem }}</div>{% endif %}
+
+<div class="grid cols-2">
+  <section class="card">
+    <h2>1. Google Cloud OAuth client</h2>
+    {% if client.present %}
+      <p><span class="chip good"><span class="i">✓</span>Client file saved</span> <span class="muted">{{ client.kind }} · {{ client.client_id }}</span></p>
+      {% if not client.redirect_ok %}
+      <div class="notice bad">This client doesn't list the hub's redirect URI. In Google Cloud → Credentials → your OAuth client, add <code>{{ client.redirect_uri }}</code> under <em>Authorized redirect URIs</em>, then download the file again and upload it here.</div>
+      {% endif %}
+    {% else %}
+      <p><span class="chip warning"><span class="i">–</span>No client file yet</span></p>
+      {% if client.error %}<div class="notice bad">{{ client.error }}</div>{% endif %}
+    {% endif %}
+    <form method="post" action="/settings/client" enctype="multipart/form-data" class="form-row" style="margin-top:10px">
+      <label class="field">OAuth client JSON
+        <input type="file" name="file" accept=".json,application/json" required>
+      </label>
+      <button class="btn primary" type="submit">{{ 'Replace' if client.present else 'Save' }} client file</button>
+    </form>
+    <p class="muted" style="margin-top:8px;font-size:12.5px">Stored only on this PC, in <code>output/hub/secrets/</code>, which git ignores.</p>
+  </section>
+
+  <section class="card">
+    <h2>How to get the client file (one time)</h2>
+    <ol class="steps">
+      <li>Open <a href="https://console.cloud.google.com/projectcreate" target="_blank" rel="noopener">Google Cloud</a> and create a project, e.g. “Content Hub”.</li>
+      <li>In <em>APIs &amp; Services → Library</em>, enable <strong>YouTube Data API v3</strong> and <strong>YouTube Analytics API</strong>.</li>
+      <li>In <em>OAuth consent screen</em>: choose <strong>External</strong>, fill in the app name and your email, and add your own Google account under <strong>Test users</strong>.</li>
+      <li>In <em>Credentials → Create credentials → OAuth client ID</em>: type <strong>Web application</strong>, and add this exact <em>Authorized redirect URI</em>:<br><code>{{ client.redirect_uri }}</code></li>
+      <li>Download the JSON and upload it on the left.</li>
+    </ol>
+    <p class="muted" style="margin-top:8px;font-size:12.5px">While the app is in testing mode Google expires sign-ins after 7 days, so channels need reconnecting weekly. Publishing the app (and passing YouTube's API audit) removes that limit and lets uploads go public.</p>
+  </section>
+</div>
+
+<section class="card section">
+  <div class="card-head"><h2>2. Your channels</h2><span class="muted">{{ channels | length }}</span></div>
+  <form method="post" action="/settings/channels" class="form-row" style="margin-bottom:14px">
+    <label class="field">Channel name <input type="text" name="name" required maxlength="100" placeholder="e.g. Focus Daily"></label>
+    <label class="field">Niche
+      <select name="niche" required>{% for k, name in niche_options %}<option value="{{ k }}">{{ name }}</option>{% endfor %}</select>
+    </label>
+    <label class="field">Publish times <input type="text" name="slots" value="19:00" placeholder="09:00, 19:00"></label>
+    <button class="btn primary" type="submit">Add channel</button>
+  </form>
+  <p class="muted" style="font-size:12.5px;margin-bottom:10px">Create the channel on YouTube first (youtube.com/channel_switcher → Create a channel), add it here, then open it and press Connect.</p>
+  <div class="table-wrap"><table>
+    <thead><tr><th>Channel</th><th>Niche</th><th>Connection</th><th>YouTube ID</th><th>Last sync</th><th></th></tr></thead>
+    <tbody>{% for c in channels %}
+      <tr>
+        <td><a class="cell-title" href="/channels/{{ c.id }}">{{ c.name }}</a>{% if c.is_mock %} <span class="muted">mock</span>{% endif %}</td>
+        <td class="secondary">{{ niche_name(c.niche) }}</td>
+        <td>{{ connection(c.connection) }}</td>
+        <td class="num secondary">{{ c.youtube_channel_id or '—' }}</td>
+        <td class="num">{{ c.last_synced_at | when }}</td>
+        <td class="r">{% if not c.is_mock %}<a class="btn small" href="/channels/{{ c.id }}">Open</a>{% endif %}</td>
+      </tr>
+    {% endfor %}</tbody>
+  </table></div>
+</section>
+
+<section class="card section">
+  <h2>3. Mock data</h2>
+  {% if mock_count %}
+  <p class="secondary">{{ mock_count }} mock channels with simulated stats and videos are loaded. Remove them once your real channels are added. Your uploaded audio and content for real channels stay.</p>
+  <form method="post" action="/settings/remove-mock" onsubmit="return confirm('Remove all {{ mock_count }} mock channels and their simulated data? This can’t be undone.')">
+    <button class="btn danger" type="submit">Remove mock data</button>
+  </form>
+  {% else %}
+  <p class="secondary"><span class="chip good"><span class="i">✓</span>No mock data</span> Everything shown comes from your own channels.</p>
+  {% endif %}
+</section>
+{% endblock %}

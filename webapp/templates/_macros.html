@@ -3,6 +3,7 @@
   'ready': ('', '○', 'Content ready'),
   'rendering': ('accent spin', '', 'Rendering'),
   'rendered': ('accent', '▶', 'Rendered'),
+  'uploading': ('accent spin', '', 'Uploading'),
   'scheduled': ('accent', '◷', 'Scheduled'),
   'published': ('good', '✓', 'Published'),
   'failed': ('critical', '✕', 'Failed')} -%}
@@ -54,9 +55,12 @@
       {% endif %}
       {% if v.status == 'rendered' %}
         <a class="btn small" href="/media/video/{{ v.id }}" target="_blank" rel="noopener">Preview</a>
-        <button class="btn small primary" data-action="youtube" type="button">Schedule on YouTube</button>
+        <button class="btn small primary" data-action="youtube" type="button">{{ 'Schedule (mock)' if v.is_mock else 'Upload to YouTube' }}</button>
       {% endif %}
-      {% if v.status not in ('published', 'rendering') %}
+      {% if v.youtube_video_id %}
+        <a class="btn small" href="https://studio.youtube.com/video/{{ v.youtube_video_id }}/edit" target="_blank" rel="noopener">Open in Studio</a>
+      {% endif %}
+      {% if v.status not in ('published', 'rendering', 'uploading') and not v.youtube_video_id %}
         <button class="btn small danger" data-action="delete-video" type="button" aria-label="Remove from queue">Remove</button>
       {% endif %}
     </div>

@@ -6,18 +6,31 @@
   <div>
     <div class="muted" style="font-size:12.5px"><a href="/">All channels</a> /</div>
     <h1>{{ channel.name }}</h1>
-    <div class="sub">{{ channel.handle }} · {{ niche_name(channel.niche) }} · {{ connection(channel.connection) }}</div>
+    <div class="sub">{% if channel.handle %}{{ channel.handle }} · {% endif %}{{ niche_name(channel.niche) }} · {{ connection(channel.connection) }}</div>
   </div>
   <div class="filters">{{ range_filter(days, ranges, "/channels/" ~ channel.id ~ "?") }}</div>
 </div>
 
-{% if channel.connection != 'connected' %}
+{% if notice %}<div class="notice ok">{{ notice }}</div>{% endif %}
+{% if problem %}<div class="notice bad">{{ problem }}</div>{% endif %}
+{% if channel.is_mock %}
+<p class="muted" style="margin:-6px 0 14px">Mock channel: stats are simulated and nothing is uploaded.</p>
+{% elif channel.connection != 'connected' %}
 <section class="card" style="margin-bottom:16px">
   <h2>{{ 'Reconnect' if channel.connection == 'expired' else 'Connect' }} this channel to YouTube</h2>
-  <p class="secondary">{% if channel.connection == 'expired' %}YouTube's sign-in for this channel has expired or was revoked, so uploads are paused.{% else %}This channel isn't linked to YouTube yet, so nothing can be uploaded to it.{% endif %}</p>
-  <button class="btn primary" type="button" disabled title="Comes with the YouTube connection step">Connect with Google</button>
-  <span class="muted" style="margin-left:8px">Available once the Google Cloud OAuth client is set up.</span>
+  <p class="secondary">{% if channel.connection == 'expired' %}YouTube's sign-in for this channel expired or was revoked, so uploads are paused.{% else %}Sign in with the Google account that owns this channel, then pick <strong>{{ channel.name }}</strong> on Google's channel list.{% endif %}</p>
+  {% if client_ready %}
+    <a class="btn primary" href="/oauth/start?channel={{ channel.id }}">Connect with Google</a>
+  {% else %}
+    <a class="btn" href="/settings">Set up the Google OAuth client first</a>
+  {% endif %}
 </section>
+{% else %}
+<div class="form-row" style="margin:-6px 0 14px">
+  <span class="secondary">YouTube channel <code>{{ channel.youtube_channel_id }}</code> · last sync {{ channel.last_synced_at | when }}</span>
+  <button class="btn small" data-action="sync" data-channel="{{ channel.id }}" type="button">Sync from YouTube</button>
+  <button class="btn small danger" data-action="disconnect" data-channel="{{ channel.id }}" type="button">Disconnect</button>
+</div>
 {% endif %}
 
 <div class="tiles">

@@ -16,8 +16,8 @@ from webapp import db, timeutil
 
 logger = logging.getLogger(__name__)
 
-EDITABLE = ("ready", "rendered", "scheduled", "failed")
-QUEUED = ("ready", "rendering", "rendered", "scheduled")
+EDITABLE = ("ready", "rendered", "scheduled", "failed")  # scheduled ones on real YouTube need re-uploading for now
+QUEUED = ("ready", "rendering", "rendered", "uploading", "scheduled")
 TIME_RE = re.compile(r"^([01]\d|2[0-3]):[0-5]\d$")
 
 
@@ -232,23 +232,13 @@ def _render(video_id: int) -> None:
             conn.close()
 
 
-def schedule_on_youtube(conn, video_id: int) -> None:
-    """Mock: marks the video as uploaded privately with its publish time. Real upload comes with the YouTube connection."""
-    row = conn.execute("SELECT v.status, c.connection FROM videos v JOIN channels c ON c.id = v.channel_id WHERE v.id = ?", (video_id,)).fetchone()
-    if not row:
-        raise ActionError("Video not found.")
-    if row["status"] != "rendered":
-        raise ActionError("Render the video first.")
-    if row["connection"] != "connected":
-        raise ActionError("This channel isn't connected to YouTube.")
-    conn.execute("UPDATE videos SET status = 'scheduled' WHERE id = ?", (video_id,))
-
-
 def delete_video(conn, video_id: int) -> None:
-    row = conn.execute("SELECT status, video_path FROM videos WHERE id = ?", (video_id,)).fetchone()
+    row = conn.execute("SELECT v.status, v.video_path, v.youtube_video_id, c.is_mock FROM videos v JOIN channels c ON c.id = v.channel_id WHERE v.id = ?", (video_id,)).fetchone()
     if not row:
         raise ActionError("Video not found.")
-    if row["status"] in ("published", "rendering"):
+    if row["youtube_video_id"] and not row["is_mock"]:
+        raise ActionError("This video is already on YouTube. Delete it in YouTube Studio; the next sync updates the hub.")
+    if row["status"] in ("published", "rendering", "uploading"):
         raise ActionError(f"A {row['status']} video can't be removed here.")
     conn.execute("DELETE FROM videos WHERE id = ?", (video_id,))
     if row["video_path"]:

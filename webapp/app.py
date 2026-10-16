@@ -13,7 +13,8 @@ from fastapi.templating import Jinja2Templates
 from markupsafe import Markup
 
 from content_templates import NICHES, workbook_bytes
-from webapp import analytics, db, mock, queue, timeutil
+from publishing.youtube import YouTubeError
+from webapp import analytics, db, mock, queue, timeutil, youtube_sync
 from webapp.queue import ActionError
 
 HERE = os.path.dirname(os.path.abspath(__file__))
@@ -71,6 +72,7 @@ templates.env.globals["renderable"] = {n for n in NICHES if queue.can_render(n)}
 def page(request: Request, name: str, **ctx):
     with db.session() as conn:
         ctx.setdefault("alert_count", len(analytics.alerts(conn)))
+        ctx.setdefault("mock_count_global", conn.execute("SELECT COUNT(*) FROM channels WHERE is_mock = 1").fetchone()[0])
     return templates.TemplateResponse(request, name, {"active": name.split(".")[0], "ranges": RANGES, **ctx})
 
 
@@ -99,7 +101,7 @@ def dashboard(request: Request, days: int = 28):
 
 
 @app.get("/channels/{channel_id}")
-def channel_page(request: Request, channel_id: int, days: int = 28):
+def channel_page(request: Request, channel_id: int, days: int = 28, notice: str = "", problem: str = ""):
     days = days_param(days)
     with db.session() as conn:
         channel = conn.execute("SELECT * FROM channels WHERE id = ?", (channel_id,)).fetchone()
@@ -118,6 +120,7 @@ def channel_page(request: Request, channel_id: int, days: int = 28):
             heatmap=analytics.timing_heatmap(conn, 90, channel_id),
             queue=[dict(r) for r in queue_rows], slots=queue.slots(conn, channel_id),
             can_render=queue.can_render(channel["niche"]),
+            notice=notice, problem=problem, client_ready=os.path.exists(youtube_sync.client_path()),
         )
 
 
@@ -240,7 +243,7 @@ def video_file(video_id: int):
 @app.get("/api/videos/{video_id}")
 def video_status(video_id: int):
     with db.session() as conn:
-        row = conn.execute("SELECT id, status, error, publish_at, video_path FROM videos WHERE id = ?", (video_id,)).fetchone()
+        row = conn.execute("SELECT id, status, error, publish_at, video_path, upload_progress, youtube_video_id FROM videos WHERE id = ?", (video_id,)).fetchone()
     if not row:
         return error("Video not found.", 404)
     return {**dict(row), "has_file": bool(row["video_path"])}
@@ -251,7 +254,7 @@ async def api_reschedule(video_id: int, request: Request):
     body = await request.json()
     try:
         with db.session() as conn:
-            value = queue.reschedule(conn, video_id, str(body.get("publish_at", "")))
+            value = youtube_sync.reschedule(conn, video_id, str(body.get("publish_at", "")))
         return {"publish_at": value, "label": when(value)}
     except ActionError as e:
         return error(e)
@@ -271,8 +274,9 @@ def api_render(video_id: int):
 def api_youtube(video_id: int):
     try:
         with db.session() as conn:
-            queue.schedule_on_youtube(conn, video_id)
-        return {"status": "scheduled"}
+            youtube_sync.start_upload(conn, video_id)
+            status = conn.execute("SELECT status FROM videos WHERE id = ?", (video_id,)).fetchone()[0]
+        return {"status": status}
     except ActionError as e:
         return error(e)
 
@@ -307,6 +311,98 @@ def api_delete_audio(audio_id: int):
         return error(e)
 
 
+# ---------- settings and YouTube connection ----------
+
+@app.get("/settings")
+def settings_page(request: Request, notice: str = "", problem: str = ""):
+    with db.session() as conn:
+        return page(request, "settings.html", **_settings_ctx(conn, request), notice=notice, problem=problem)
+
+
+@app.post("/settings/client")
+async def settings_client(request: Request, file: UploadFile = File(...)):
+    try:
+        youtube_sync.save_client_file(await file.read(64 * 1024))
+        return RedirectResponse("/settings?notice=OAuth+client+saved.", status_code=303)
+    except ActionError as e:
+        return RedirectResponse(f"/settings?problem={_q(e)}", status_code=303)
+
+
+@app.post("/settings/channels")
+def settings_add_channel(name: str = Form(""), niche: str = Form(""), slots: str = Form("")):
+    try:
+        with db.session() as conn:
+            channel_id = youtube_sync.add_channel(conn, name, niche, slots)
+        return RedirectResponse(f"/channels/{channel_id}", status_code=303)
+    except ActionError as e:
+        return RedirectResponse(f"/settings?problem={_q(e)}", status_code=303)
+
+
+@app.post("/settings/remove-mock")
+def settings_remove_mock():
+    with db.session() as conn:
+        removed = youtube_sync.remove_mock_data(conn)
+    return RedirectResponse(f"/settings?notice=Removed+{removed}+mock+channels+and+their+data.", status_code=303)
+
+
+@app.get("/oauth/start")
+def oauth_start(request: Request, channel: int):
+    try:
+        with db.session() as conn:
+            url = youtube_sync.start_connect(conn, channel, str(request.base_url))
+        return RedirectResponse(url, status_code=303)
+    except (ActionError, YouTubeError) as e:
+        return RedirectResponse(f"/channels/{channel}?problem={_q(e)}", status_code=303)
+
+
+@app.get("/oauth/callback")
+def oauth_callback(request: Request, state: str = "", code: str = "", error: str = ""):
+    pending = youtube_sync._pending.get(state, {})
+    back = f"/channels/{pending['channel_id']}" if pending else "/settings"
+    if error:
+        youtube_sync._pending.pop(state, None)
+        message = "You cancelled the sign-in." if error == "access_denied" else f"Google returned: {error}"
+        return RedirectResponse(f"{back}?problem={_q(message)}", status_code=303)
+    try:
+        with db.session() as conn:
+            channel_id = youtube_sync.finish_connect(conn, state, code, str(request.base_url))
+        return RedirectResponse(f"/channels/{channel_id}?notice=Connected+to+YouTube.", status_code=303)
+    except (ActionError, YouTubeError) as e:
+        return RedirectResponse(f"{back}?problem={_q(e)}", status_code=303)
+
+
+@app.post("/api/channels/{channel_id}/sync")
+def api_sync(channel_id: int):
+    try:
+        with db.session() as conn:
+            result = youtube_sync.sync_channel(conn, channel_id)
+        return {"synced": True, **result}
+    except ActionError as e:
+        return error(e)
+
+
+@app.post("/api/channels/{channel_id}/disconnect")
+def api_disconnect(channel_id: int):
+    with db.session() as conn:
+        youtube_sync.disconnect(conn, channel_id)
+    return {"disconnected": True}
+
+
+def _q(message) -> str:
+    from urllib.parse import quote_plus
+
+    return quote_plus(str(message)[:300])
+
+
+def _settings_ctx(conn, request: Request):
+    return {
+        "client": youtube_sync.client_status(str(request.base_url)),
+        "channels": [dict(r) for r in conn.execute("SELECT id, name, niche, connection, is_mock, youtube_channel_id, last_synced_at FROM channels ORDER BY is_mock, name")],
+        "mock_count": conn.execute("SELECT COUNT(*) FROM channels WHERE is_mock = 1").fetchone()[0],
+        "niche_options": [(k, s.name) for k, s in NICHES.items()],
+    }
+
+
 # ---------- shared queries ----------
 
 def _upcoming(conn, hours: int, limit: int = 500, channel_id: int = None):
@@ -318,7 +414,7 @@ def _upcoming(conn, hours: int, limit: int = 500, channel_id: int = None):
         where += " AND v.channel_id = ?"
         args.append(channel_id)
     rows = conn.execute(
-        f"SELECT v.id, v.title, v.status, v.publish_at, v.error, v.channel_id, v.content_json, v.is_mock, c.name channel_name, c.niche "
+        f"SELECT v.id, v.title, v.status, v.publish_at, v.error, v.channel_id, v.content_json, v.is_mock, v.youtube_video_id, c.name channel_name, c.niche "
         f"FROM videos v JOIN channels c ON c.id = v.channel_id WHERE {where} ORDER BY v.publish_at LIMIT ?", args + [limit]).fetchall()
     return [dict(r) for r in rows]
 
@@ -332,7 +428,7 @@ def _content_ctx(conn, niche: str):
     uploads = [dict(r) for r in conn.execute(
         "SELECT u.*, c.name channel_name FROM uploads u LEFT JOIN channels c ON c.id = u.channel_id WHERE u.niche = ? ORDER BY u.id DESC LIMIT 20", (niche,))]
     ready = [dict(r) for r in conn.execute(
-        "SELECT v.id, v.title, v.status, v.publish_at, v.error, v.channel_id, v.content_json, v.is_mock, c.name channel_name FROM videos v JOIN channels c ON c.id = v.channel_id "
+        "SELECT v.id, v.title, v.status, v.publish_at, v.error, v.channel_id, v.content_json, v.is_mock, v.youtube_video_id, c.name channel_name FROM videos v JOIN channels c ON c.id = v.channel_id "
         "WHERE c.niche = ? AND v.status IN ('ready','rendering','rendered','failed') AND v.is_mock = 0 ORDER BY v.publish_at", (niche,))]
     return {
         "niches": [{"id": k, "name": s.name, "aspect": s.aspect_ratio, "pending": counts.get(k, 0), "renders": queue.can_render(k)} for k, s in NICHES.items()],

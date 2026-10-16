@@ -15,5 +15,9 @@ uvicorn
 jinja2
 python-multipart
 tzdata
+# YouTube Data and Analytics APIs (sign-in, upload, stats)
+google-api-python-client
+google-auth-oauthlib
+google-auth-httplib2
 # Test client for the web app tests
 httpx

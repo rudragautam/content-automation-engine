@@ -37,7 +37,7 @@ CREATE TABLE IF NOT EXISTS videos (
     title TEXT NOT NULL,
     description TEXT NOT NULL DEFAULT '',
     tags TEXT NOT NULL DEFAULT '',
-    status TEXT NOT NULL,              -- ready | rendering | rendered | scheduled | published | failed
+    status TEXT NOT NULL,              -- ready | rendering | rendered | uploading | scheduled | published | failed
     publish_at TEXT,                   -- local time YYYY-MM-DDTHH:MM
     duration_s REAL,
     views INTEGER NOT NULL DEFAULT 0,
@@ -86,7 +86,17 @@ CREATE TABLE IF NOT EXISTS quota_usage (
     date TEXT PRIMARY KEY,
     units INTEGER NOT NULL
 );
+CREATE TABLE IF NOT EXISTS settings (
+    key TEXT PRIMARY KEY,
+    value TEXT NOT NULL
+);
 """
+
+# Columns added after the first release; init() adds any that an older database lacks.
+MIGRATIONS = {
+    "videos": [("youtube_video_id", "TEXT"), ("upload_progress", "REAL")],
+    "channels": [("last_synced_at", "TEXT")],
+}
 
 
 def db_path() -> str:
@@ -114,3 +124,17 @@ def session():
 def init() -> None:
     with session() as conn:
         conn.executescript(SCHEMA)
+        for table, columns in MIGRATIONS.items():
+            existing = {r["name"] for r in conn.execute(f"PRAGMA table_info({table})")}
+            for name, kind in columns:
+                if name not in existing:
+                    conn.execute(f"ALTER TABLE {table} ADD COLUMN {name} {kind}")
+
+
+def get_setting(conn, key: str, default: str = None):
+    row = conn.execute("SELECT value FROM settings WHERE key = ?", (key,)).fetchone()
+    return row[0] if row else default
+
+
+def set_setting(conn, key: str, value: str) -> None:
+    conn.execute("INSERT OR REPLACE INTO settings (key, value) VALUES (?, ?)", (key, value))

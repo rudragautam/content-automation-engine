@@ -16,6 +16,7 @@
       <a href="/content" class="{{ 'active' if active == 'content' }}">Content</a>
       <a href="/audio" class="{{ 'active' if active == 'audio' }}">Audio library</a>
       <a href="/analytics" class="{{ 'active' if active == 'analytics' }}">Analytics</a>
+      <a href="/settings" class="{{ 'active' if active == 'settings' }}">Settings</a>
     </nav>
     <div class="sidebar-foot">
       <button class="btn small" id="theme-toggle" type="button">Light / dark</button>
@@ -23,7 +24,7 @@
     </div>
   </aside>
   <main>
-    <div class="mock-banner"><strong>Mock data.</strong> Channels, stats and published videos are simulated until YouTube is connected. Content uploads, the audio library and Focus &amp; Habits rendering are real.</div>
+    {% if mock_count_global %}<div class="mock-banner"><strong>Mock data.</strong> {{ mock_count_global }} simulated channels are loaded alongside your real ones. Remove them in <a href="/settings">Settings</a> once your channels are connected.</div>{% endif %}
     {% block content %}{% endblock %}
   </main>
 </div>
