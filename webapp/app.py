@@ -15,7 +15,7 @@ from markupsafe import Markup
 
 from content_templates import NICHES, workbook_bytes
 from publishing.youtube import ABOUT_LIMIT as YT_ABOUT_LIMIT, YouTubeError
-from webapp import ai_drafts, analytics, channel_setup, db, mock, queue, scope, timeutil, youtube_sync
+from webapp import ai_drafts, analytics, channel_art, channel_setup, db, mock, queue, scope, timeutil, youtube_sync
 from webapp.paging import paginate
 from webapp.queue import ActionError
 
@@ -162,7 +162,8 @@ def setup_page(request: Request, channel_id: int, notice: str = "", problem: str
         return page(
             request, "setup.html", bare=True, active_override="dashboard", channel=dict(channel), notice=notice, problem=problem,
             prefs=channel_setup.defaults(conn, channel_id), categories=channel_setup.CATEGORIES, languages=channel_setup.LANGUAGES,
-            countries=channel_setup.COUNTRIES, privacy=channel_setup.PRIVACY, about_limit=YT_ABOUT_LIMIT, **ctx,
+            countries=channel_setup.COUNTRIES, privacy=channel_setup.PRIVACY, about_limit=YT_ABOUT_LIMIT,
+            drafts=channel_art.drafts(channel_id), **ctx,
         )
 
 
@@ -173,17 +174,50 @@ def setup_about(channel_id: int, description: str = Form(""), keywords: str = Fo
 
 
 @app.post("/channels/{channel_id}/setup/banner")
-async def setup_banner(channel_id: int, file: UploadFile = File(...)):
-    data = await file.read(channel_setup.BANNER_MAX_BYTES + 1)
-    return _setup_action(channel_id, "branding", "Banner uploaded. YouTube can take a few minutes to show it everywhere.",
-                         lambda conn: channel_setup.save_banner(conn, channel_id, data))
+async def setup_banner(channel_id: int, file: UploadFile = File(None), draft: str = Form("")):
+    data = await file.read(channel_setup.BANNER_MAX_BYTES + 1) if file else b""
+
+    def save(conn):  # an uploaded file, or the Gemini draft
+        channel_setup.save_banner(conn, channel_id, channel_art.read_draft(channel_id, "banner") if draft else data)
+        if draft:
+            channel_art.discard(channel_id, "banner")
+    return _setup_action(channel_id, "branding", "Banner uploaded. YouTube can take a few minutes to show it everywhere.", save)
 
 
 @app.post("/channels/{channel_id}/setup/watermark")
-async def setup_watermark(channel_id: int, file: UploadFile = File(...), timing: str = Form("end")):
-    data = await file.read(channel_setup.WATERMARK_MAX_BYTES + 1)
-    return _setup_action(channel_id, "branding", "Watermark set on all of this channel's videos.",
-                         lambda conn: channel_setup.save_watermark(conn, channel_id, data, timing))
+async def setup_watermark(channel_id: int, file: UploadFile = File(None), timing: str = Form("end"), draft: str = Form("")):
+    data = await file.read(channel_setup.WATERMARK_MAX_BYTES + 1) if file else b""
+
+    def save(conn):
+        channel_setup.save_watermark(conn, channel_id, channel_art.read_draft(channel_id, "watermark") if draft else data, timing)
+        if draft:
+            channel_art.discard(channel_id, "watermark")
+    return _setup_action(channel_id, "branding", "Watermark set on all of this channel's videos.", save)
+
+
+@app.get("/channels/{channel_id}/setup/draft/{kind}")
+def setup_draft(channel_id: int, kind: str, download: str = ""):
+    if kind not in channel_art.KINDS or not os.path.exists(channel_art.draft_path(channel_id, kind)):
+        return Response("No draft", status_code=404)
+    path = channel_art.draft_path(channel_id, kind)
+    name = f"{kind}.{channel_art.EXTENSIONS[kind]}" if download else None
+    return FileResponse(path, filename=name, headers={"Cache-Control": "no-store"})
+
+
+@app.post("/channels/{channel_id}/setup/draft/{kind}/discard")
+def setup_draft_discard(channel_id: int, kind: str):
+    if kind in channel_art.KINDS:
+        channel_art.discard(channel_id, kind)
+    return _setup_back(channel_id, "branding")
+
+
+@app.post("/api/channels/{channel_id}/setup/generate-art")
+def setup_generate_art(channel_id: int, kinds: str = Form("banner,watermark"), idea: str = Form("")):
+    try:
+        with db.session() as conn:
+            return channel_art.generate(conn, channel_id, kinds.split(","), idea)
+    except ActionError as e:
+        return error(e)
 
 
 @app.post("/channels/{channel_id}/setup/watermark/remove")

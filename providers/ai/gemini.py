@@ -5,6 +5,7 @@ so the only dependency is httpx. The key is sent in the x-goog-api-key header,
 never in the URL, so it can't end up in logs.
 """
 
+import base64
 import json
 import logging
 import re
@@ -23,6 +24,10 @@ RETRY_WAITS = (3, 10)
 
 class GeminiError(Exception):
     """A Gemini problem with a message fit to show the user."""
+
+
+class GeminiQuotaError(GeminiError):
+    """The key's plan has no quota at all for the model (e.g. image models on the free tier)."""
 
 
 class Gemini:
@@ -71,6 +76,26 @@ class Gemini:
         except ValueError:
             raise GeminiError("Gemini's answer wasn't valid JSON. Try again.")
 
+    def generate_image(self, prompt: str, aspect_ratio: str = "1:1", model: Optional[str] = None) -> bytes:
+        """Draw one image with an image model and return its bytes (PNG or JPEG)."""
+        model = model or self.model
+        if not model:
+            raise GeminiError("No Gemini image model is available to this key.")
+        body = {
+            "contents": [{"role": "user", "parts": [{"text": prompt}]}],
+            "generationConfig": {"responseModalities": ["IMAGE"], "imageConfig": {"aspectRatio": aspect_ratio}},
+        }
+        data = self._request("POST", f"/models/{model}:generateContent", json=body)
+        blocked = data.get("promptFeedback", {}).get("blockReason")
+        if blocked:
+            raise GeminiError(f"Gemini refused to draw that ({blocked}). Change the idea.")
+        for candidate in data.get("candidates") or []:
+            for part in candidate.get("content", {}).get("parts", []):
+                inline = part.get("inlineData") or {}
+                if inline.get("data") and not part.get("thought"):
+                    return base64.b64decode(inline["data"])
+        raise GeminiError("Gemini didn't return an image. Try again or change the idea.")
+
     def close(self) -> None:
         self._client.close()
 
@@ -83,7 +108,9 @@ class Gemini:
                     time.sleep(RETRY_WAITS[attempt])
                     continue
                 raise GeminiError(f"Couldn't reach Gemini: {e}")
-            if res.status_code in RETRY_STATUSES and attempt < len(RETRY_WAITS):
+            # A zero quota (the free tier on image models) never clears by waiting.
+            no_quota = res.status_code == 429 and "limit: 0" in res.text
+            if res.status_code in RETRY_STATUSES and attempt < len(RETRY_WAITS) and not no_quota:
                 time.sleep(RETRY_WAITS[attempt])
                 continue
             if res.status_code >= 400:
@@ -104,6 +131,8 @@ def _error(res: httpx.Response) -> GeminiError:
         return GeminiError("This Gemini API key isn't allowed to use the Gemini API. Check the key's restrictions in Google AI Studio.")
     if res.status_code == 404:
         return GeminiError("That Gemini model isn't available to this key. Pick another model in Settings.")
+    if res.status_code == 429 and "limit: 0" in message:
+        return GeminiQuotaError("This Gemini key's plan doesn't include this model (its free-tier limit is 0). Turn on billing in Google AI Studio to use it.")
     if res.status_code == 429:
         return GeminiError("Gemini's rate limit or quota is used up. Wait a minute and try again.")
     return GeminiError(f"Gemini error {res.status_code} {status}: {message}".strip())
@@ -122,3 +151,15 @@ def pick_default_model(models: List[Dict[str, str]]) -> Optional[str]:
             return max(stable)[1]
     flash = [m["id"] for m in models if "flash" in m["id"] and not re.search(r"lite|image|tts|audio|live|embed|thinking", m["id"])]
     return flash[0] if flash else (models[0]["id"] if models else None)
+
+
+def pick_image_model(models: List[Dict[str, str]]) -> Optional[str]:
+    """Newest stable Flash image model (cheaper than Pro); a preview or Pro one only if nothing else."""
+    def rank(model_id: str):
+        m = re.match(r"gemini-(\d+)(?:\.(\d+))?-(flash|flash-lite|pro)-image(-preview)?$", model_id)
+        if not m:
+            return None
+        return (m.group(4) is None, m.group(3) == "flash", int(m.group(1)), int(m.group(2) or 0))
+
+    ranked = [(rank(m["id"]), m["id"]) for m in models if rank(m["id"])]
+    return max(ranked)[1] if ranked else None

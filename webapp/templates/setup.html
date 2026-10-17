@@ -40,7 +40,9 @@
   <nav class="setup-nav" aria-label="Setup sections">
     {% if live %}
     <a href="#about">About</a>
+    {% endif %}
     <a href="#branding">Banner &amp; watermark</a>
+    {% if live %}
     <a href="#trailer">Channel trailer</a>
     <a href="#playlists">Playlists</a>
     {% endif %}
@@ -74,34 +76,92 @@
       </form>
     </section>
 
+  {% endif %}
     <section class="card setup-section" id="branding">
-      <div class="card-head"><h2>Banner &amp; watermark</h2></div>
-      <h3>Banner</h3>
-      {% if live.banner %}<img class="banner-preview" src="{{ live.banner }}=w1060" alt="Current channel banner" referrerpolicy="no-referrer">{% else %}<div class="empty banner-preview">No banner yet</div>{% endif %}
-      <form method="post" action="/channels/{{ channel.id }}/setup/banner" enctype="multipart/form-data" class="form-row" style="margin-top:10px">
-        <label class="field" style="flex:1">Banner image (JPG or PNG)
-          <input type="file" name="file" accept="image/jpeg,image/png" required>
+      <div class="card-head"><h2>Banner &amp; watermark</h2><span class="muted">Make them with Gemini or upload your own</span></div>
+      <div class="form-row art-generate">
+        <label class="field" style="flex:1">Idea for Gemini (optional)
+          <input type="text" id="art-idea" maxlength="300" placeholder="e.g. a friendly lion teacher, bright jungle colours">
         </label>
-        <button class="btn primary" type="submit">Upload banner</button>
-      </form>
-      <p class="hint">2560×1440 works best (at least 2048×1152, 16:9, up to 6 MB). Keep text and logos in the centre 1546×423; that part shows on every device.</p>
+        <button class="btn" type="button" data-generate-art="banner,watermark">✨ Generate both</button>
+      </div>
+      <div class="notice gen-status" id="art-status" role="status" hidden></div>
+
+      <h3>Banner</h3>
+      <div class="art-pair">
+        <figure>
+          <figcaption class="muted">On YouTube now</figcaption>
+          {% if live and live.banner %}<img class="banner-preview" src="{{ live.banner }}=w1060" alt="Current channel banner" referrerpolicy="no-referrer">{% else %}<div class="empty banner-preview">No banner yet</div>{% endif %}
+        </figure>
+        <figure class="art-draft" id="draft-banner" {{ 'hidden' if not drafts.banner }}>
+          <figcaption><span class="ai-badge">✨ Gemini draft · not on YouTube yet</span></figcaption>
+          <img class="banner-preview" src="{{ drafts.banner or '' }}" alt="Banner drafted by Gemini">
+          <div class="art-actions">
+            {% if live %}
+            <form method="post" action="/channels/{{ channel.id }}/setup/banner"><input type="hidden" name="draft" value="1"><button class="btn primary" type="submit">Upload this banner</button></form>
+            {% endif %}
+            <a class="btn small" href="/channels/{{ channel.id }}/setup/draft/banner?download=1" data-download>Download</a>
+            <form method="post" action="/channels/{{ channel.id }}/setup/draft/banner/discard"><button class="btn small" type="submit">Discard</button></form>
+          </div>
+        </figure>
+      </div>
+      <div class="form-row" style="margin-top:10px">
+        <button class="btn" type="button" data-generate-art="banner">✨ Generate banner</button>
+        {% if live %}
+        <form method="post" action="/channels/{{ channel.id }}/setup/banner" enctype="multipart/form-data" class="form-row" style="flex:1">
+          <label class="field" style="flex:1">Or upload your own (JPG or PNG)
+            <input type="file" name="file" accept="image/jpeg,image/png" required>
+          </label>
+          <button class="btn primary" type="submit">Upload banner</button>
+        </form>
+        {% endif %}
+      </div>
+      <p class="hint">2560×1440 works best (at least 2048×1152, 16:9, up to 6 MB). Keep text and logos in the centre 1546×423; that part shows on every device. Gemini's drafts follow this.</p>
 
       <h3 style="margin-top:20px">Watermark</h3>
       <p class="secondary" style="margin-bottom:8px">A small image, usually a subscribe button, shown in the corner of every video on the channel. Viewers who click it can subscribe.</p>
-      <form method="post" action="/channels/{{ channel.id }}/setup/watermark" enctype="multipart/form-data" class="form-row">
-        <label class="field" style="flex:1">Image (square PNG, JPG or GIF, at least 150×150, up to 1 MB)
-          <input type="file" name="file" accept="image/png,image/jpeg,image/gif" required>
-        </label>
-        <label class="field">Show it
-          <select name="timing"><option value="end">For the last 15 seconds</option><option value="start">For the whole video</option></select>
-        </label>
-        <button class="btn primary" type="submit">Set watermark</button>
-      </form>
+      <figure class="art-draft" id="draft-watermark" {{ 'hidden' if not drafts.watermark }}>
+        <figcaption><span class="ai-badge">✨ Gemini draft · not on YouTube yet</span></figcaption>
+        <div class="watermark-previews">
+          <img class="watermark-preview" src="{{ drafts.watermark or '' }}" alt="Watermark drafted by Gemini" width="160" height="160">
+          <div class="watermark-on-video"><img src="{{ drafts.watermark or '' }}" alt="" width="44" height="44"><span class="muted">How it looks on a video</span></div>
+        </div>
+        <div class="art-actions">
+          {% if live %}
+          <form method="post" action="/channels/{{ channel.id }}/setup/watermark" class="form-row">
+            <input type="hidden" name="draft" value="1">
+            <select name="timing" aria-label="When it shows"><option value="end">For the last 15 seconds</option><option value="start">For the whole video</option></select>
+            <button class="btn primary" type="submit">Set this watermark</button>
+          </form>
+          {% endif %}
+          <a class="btn small" href="/channels/{{ channel.id }}/setup/draft/watermark?download=1" data-download>Download</a>
+          <form method="post" action="/channels/{{ channel.id }}/setup/draft/watermark/discard"><button class="btn small" type="submit">Discard</button></form>
+        </div>
+      </figure>
+      <div class="form-row">
+        <button class="btn" type="button" data-generate-art="watermark">✨ Generate watermark</button>
+        {% if live %}
+        <form method="post" action="/channels/{{ channel.id }}/setup/watermark" enctype="multipart/form-data" class="form-row" style="flex:1">
+          <label class="field" style="flex:1">Or upload your own (square PNG, JPG or GIF, at least 150×150, up to 1 MB)
+            <input type="file" name="file" accept="image/png,image/jpeg,image/gif" required>
+          </label>
+          <label class="field">Show it
+            <select name="timing"><option value="end">For the last 15 seconds</option><option value="start">For the whole video</option></select>
+          </label>
+          <button class="btn primary" type="submit">Set watermark</button>
+        </form>
+        {% endif %}
+      </div>
+      {% if live %}
       <form method="post" action="/channels/{{ channel.id }}/setup/watermark/remove" style="margin-top:8px" onsubmit="return confirm('Remove the watermark from all of this channel\'s videos?')">
         <button class="btn small danger" type="submit">Remove watermark</button>
         <span class="hint">YouTube doesn't let apps read back the current watermark, so it isn't previewed here.</span>
       </form>
+      {% else %}
+      <p class="hint">Once the channel is connected you can put these on YouTube from here. Until then, download them for YouTube Studio.</p>
+      {% endif %}
     </section>
+  {% if live %}
 
     <section class="card setup-section" id="trailer">
       <div class="card-head"><h2>Channel trailer</h2><span class="muted">Plays for visitors who haven't subscribed</span></div>
@@ -239,8 +299,37 @@
     radio.closest("fieldset").classList.add("ai-filled");
     touched.add(radio.closest(".setup-section"));
   }
+  // Banner and watermark: Gemini draws drafts that show next to what's live; Upload puts one on YouTube.
+  const artStatus = document.getElementById("art-status"), artButtons = document.querySelectorAll("[data-generate-art]");
+  async function generateArt(kinds) {
+    artButtons.forEach((b) => { b.disabled = true; });
+    artStatus.hidden = false; artStatus.className = "notice gen-status";
+    artStatus.textContent = `Gemini is making the ${kinds.replace(",", " and ")}… this takes about 15–40 seconds.`;
+    try {
+      const body = new FormData();
+      body.append("kinds", kinds);
+      body.append("idea", document.getElementById("art-idea").value);
+      const res = await fetch(`/api/channels/${gen.dataset.channel}/setup/generate-art`, { method: "POST", body });
+      const data = await res.json();
+      if (!res.ok) throw new Error(data.error || "Gemini couldn't make it.");
+      for (const [kind, url] of Object.entries(data.drafts)) {
+        const box = document.getElementById(`draft-${kind}`);
+        box.querySelectorAll("img").forEach((img) => { img.src = url; });
+        box.hidden = false;
+      }
+      artStatus.className = "notice ok gen-status";
+      artStatus.textContent = (data.how === "artwork" ? "Gemini painted it. " : "Gemini designed it and the hub drew it at YouTube's exact size. ") +
+        "It's a draft: upload it, download it, or press Generate again for another one." + (data.note ? " " + data.note : "");
+    } catch (e) {
+      artStatus.className = "notice bad gen-status"; artStatus.textContent = e.message;
+    }
+    artButtons.forEach((b) => { b.disabled = false; });
+  }
+  artButtons.forEach((b) => b.addEventListener("click", () => generateArt(b.dataset.generateArt)));
+
   gen.addEventListener("click", async () => {
     gen.disabled = true;
+    generateArt("banner,watermark");
     genStatus.hidden = false; genStatus.className = "notice gen-status";
     genStatus.textContent = "Gemini is writing the channel setup… this takes about 10–20 seconds.";
     try {
