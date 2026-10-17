@@ -216,11 +216,11 @@ async def setup_defaults(request: Request, channel_id: int):
                          lambda conn: channel_setup.save_defaults(conn, channel_id, form))
 
 
-@app.post("/api/channels/{channel_id}/setup/write-about")
-def setup_write_about(channel_id: int):
+@app.post("/api/channels/{channel_id}/setup/generate")
+def setup_generate(channel_id: int):
     try:
         with db.session() as conn:
-            return channel_setup.write_about(conn, channel_id)
+            return channel_setup.generate_setup(conn, channel_id)
     except ActionError as e:
         return error(e)
 

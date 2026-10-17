@@ -166,18 +166,54 @@ class TestSetupInHub(HubTestCase):
     def test_defaults_validation(self):
         self.assertIn("Pick a category", self.client.post(f"/channels/{self.ch}/setup/defaults", data={"category_id": "999", "language": "en"}).text)
 
-    def test_write_about_with_gemini(self):
+    def test_generate_with_gemini_fills_every_section(self):
+        with db.session() as conn:
+            conn.execute("INSERT INTO videos (channel_id, video_ref, title, status, publish_at, views, youtube_video_id, created_at) "
+                         "VALUES (?, 'y1', 'Brush your teeth with Leo', 'published', '2026-09-01T10:00', 900, 'abcdefghijk', 'now')", (self.ch,))
+
         class Fake:
             def generate_json(self, prompt, schema, system="", temperature=0.9):
-                self.prompt = prompt
-                return {"description": "Learn <fast> every day.", "keywords": ["study", "focus tips"]}
+                self.prompt, self.schema = prompt, schema
+                return {
+                    "about": {"description": "Learn <fast> every day.", "keywords": ["kids", "good habits"], "country": "IN", "language": "hi"},
+                    "playlist": {"title": "Good Habits", "description": "Daily habits for kids."},
+                    "upload_defaults": {"category_id": "27", "language": "hi", "made_for_kids": True,
+                                        "default_tags": ["leo ki pathshala", "kids"], "description_footer": "Subscribe! #kids"},
+                    "trailer_video_id": "abcdefghijk",
+                }
 
         fake = Fake()
         with db.session() as conn:
-            draft = channel_setup.write_about(conn, self.ch, client=fake)
-        self.assertEqual(draft, {"description": "Learn fast every day.", "keywords": ["study", "focus tips"]})
-        self.assertIn("Leo Ki Pathshala", fake.prompt)
-        self.assertIn("Gemini API key", self.client.post(f"/api/channels/{self.ch}/setup/write-about").json()["error"])
+            draft = channel_setup.generate_setup(conn, self.ch, client=fake)
+        self.assertEqual(draft["about"], {"description": "Learn fast every day.", "keywords": ["kids", "good habits"], "country": "IN", "language": "hi"})
+        self.assertEqual(draft["trailer_video_id"], "abcdefghijk")
+        self.assertEqual(draft["playlist"]["title"], "Good Habits")
+        self.assertEqual(draft["upload_defaults"]["made_for_kids"], True)
+        self.assertEqual(draft["upload_defaults"]["synthetic_media"], True)
+        self.assertIn("Brush your teeth with Leo", fake.prompt)
+        self.assertIn("Old about", fake.prompt)  # the channel's real About text guides Gemini
+        self.assertLess(fake.prompt.index("Old about"), fake.prompt.index("HINT ONLY"))
+        self.assertEqual(fake.schema["properties"]["trailer_video_id"]["enum"], ["abcdefghijk"])
+        with db.session() as conn:  # nothing was saved
+            self.assertEqual(channel_setup.defaults(conn, self.ch)["made_for_kids"], False)
+        self.assertEqual(self.calls("channels", "update"), [])
+
+    def test_generated_values_outside_the_choices_are_dropped(self):
+        draft = channel_setup._clean_setup({
+            "about": {"description": "x" * 2000, "keywords": ["k%d" % i for i in range(200)], "country": "ZZ", "language": "xx"},
+            "upload_defaults": {"category_id": "999", "language": "hi"},
+            "trailer_video_id": "notalistedid",
+        }, {"abcdefghijk"})
+        self.assertEqual(len(draft["about"]["description"]), 1000)
+        self.assertLessEqual(len(yt.format_keywords(draft["about"]["keywords"])), 500)
+        self.assertEqual((draft["about"]["country"], draft["about"]["language"], draft["upload_defaults"]["category_id"], draft["trailer_video_id"]), ("", "", "", ""))
+
+    def test_generate_needs_a_key_and_page_has_one_button(self):
+        self.assertIn("Gemini API key", self.client.post(f"/api/channels/{self.ch}/setup/generate").json()["error"])
+        page = self.client.get(f"/channels/{self.ch}/setup").text
+        self.assertEqual(page.count("Generate with Gemini"), 1)
+        for field in ("about-description", "about-keywords", "about-country", "trailer-video", "playlist-title", "defaults-category", "defaults-footer"):
+            self.assertIn(f'id="{field}"', page)
 
     def test_not_connected_channel_explains_what_to_do(self):
         with db.session() as conn:

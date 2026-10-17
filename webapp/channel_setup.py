@@ -96,7 +96,15 @@ def load(conn, channel_id: int, services=None) -> Dict[str, Any]:
     playlists = yt.list_playlists(youtube)
     videos = yt.recent_videos(youtube, live["uploads_playlist"], 25) if live["uploads_playlist"] else []
     _quota(conn, 3 + (1 if videos else 0))
-    return {"live": live, "playlists": playlists, "videos": [v for v in videos if v["privacy"] == "public"]}
+    public = [{"id": v["id"], "title": v["title"]} for v in videos if v["privacy"] == "public"]
+    # Older public videos the hub has synced can be the trailer too (Gemini picks from these as well).
+    seen = {v["id"] for v in public}
+    for r in conn.execute("SELECT youtube_video_id id, title FROM videos WHERE channel_id = ? AND status = 'published' "
+                          "AND youtube_video_id IS NOT NULL ORDER BY views DESC", (channel_id,)):
+        if r["id"] not in seen:
+            public.append({"id": r["id"], "title": r["title"]})
+            seen.add(r["id"])
+    return {"live": live, "playlists": playlists, "videos": public}
 
 
 # ---------- writing to YouTube ----------
@@ -182,45 +190,119 @@ def create_playlist(conn, channel_id: int, title: str, description: str, privacy
 
 # ---------- Gemini ----------
 
-ABOUT_SCHEMA = {
-    "type": "OBJECT",
-    "properties": {
-        "description": {"type": "STRING", "description": "Channel description, 600-900 characters, 2-4 short paragraphs."},
-        "keywords": {"type": "ARRAY", "items": {"type": "STRING"}, "minItems": 8, "maxItems": 15, "description": "Search keywords, lowercase, 1-3 words each."},
-    },
-    "required": ["description", "keywords"],
-}
+def _setup_schema(trailer_ids: List[str]) -> Dict[str, Any]:
+    string = {"type": "STRING"}
+    props: Dict[str, Any] = {
+        "about": {"type": "OBJECT", "properties": {
+            "description": {"type": "STRING", "description": "Channel About text, 600-900 characters, 2-4 short paragraphs separated by a blank line."},
+            "keywords": {"type": "ARRAY", "items": string, "minItems": 8, "maxItems": 15, "description": "Search keywords, lowercase, 1-3 words each."},
+            "country": {"type": "STRING", "enum": list(COUNTRIES)},
+            "language": {"type": "STRING", "enum": list(LANGUAGES)},
+        }, "required": ["description", "keywords", "country", "language"],
+            "propertyOrdering": ["description", "keywords", "country", "language"]},
+        "playlist": {"type": "OBJECT", "properties": {
+            "title": {"type": "STRING", "description": "A playlist for this channel's regular videos, up to 60 characters."},
+            "description": {"type": "STRING", "description": "1-2 sentences about the playlist."},
+        }, "required": ["title", "description"]},
+        "upload_defaults": {"type": "OBJECT", "properties": {
+            "category_id": {"type": "STRING", "enum": list(CATEGORIES)},
+            "language": {"type": "STRING", "enum": list(LANGUAGES)},
+            "made_for_kids": {"type": "BOOLEAN", "description": "True only if the videos are made primarily for children under 13."},
+            "default_tags": {"type": "ARRAY", "items": string, "minItems": 2, "maxItems": 5, "description": "Short tags added to every video, e.g. the channel name."},
+            "description_footer": {"type": "STRING", "description": "2-3 short lines added to the end of every video description: a subscribe line and 2-3 hashtags."},
+        }, "required": ["category_id", "language", "made_for_kids", "default_tags", "description_footer"],
+            "propertyOrdering": ["category_id", "language", "made_for_kids", "default_tags", "description_footer"]},
+    }
+    order = ["about", "playlist", "upload_defaults"]
+    if trailer_ids:
+        props["trailer_video_id"] = {"type": "STRING", "enum": trailer_ids, "description": "The video that best introduces the channel to a new visitor."}
+        order.append("trailer_video_id")
+    return {"type": "OBJECT", "properties": props, "required": order, "propertyOrdering": order}
 
 
-def write_about(conn, channel_id: int, client=None) -> Dict[str, Any]:
-    """A draft description and keywords for the channel's niche; nothing is saved."""
+def generate_setup(conn, channel_id: int, client=None, services=None) -> Dict[str, Any]:
+    """A draft for every text field of the setup window, written by Gemini; nothing is saved."""
     from webapp import ai_drafts
     from providers.ai.gemini import Gemini, GeminiError
 
-    row = conn.execute("SELECT name, niche FROM channels WHERE id = ?", (channel_id,)).fetchone()
+    row = conn.execute("SELECT name, handle, niche, setup_json FROM channels WHERE id = ?", (channel_id,)).fetchone()
     spec = NICHES.get(row["niche"])
     if not client:
         key, model = ai_drafts.api_key(), db.get_setting(conn, "gemini_model")
         if not key or not model:
             raise ActionError("Add your Gemini API key in Settings first.")
         client = Gemini(key, model)
-    titles = [r[0] for r in conn.execute("SELECT title FROM videos WHERE channel_id = ? ORDER BY id DESC LIMIT 12", (channel_id,))]
+    titles = [r[0] for r in conn.execute("SELECT title FROM videos WHERE channel_id = ? ORDER BY COALESCE(publish_at, created_at) DESC LIMIT 20", (channel_id,))]
+    public = [dict(r) for r in conn.execute(
+        "SELECT youtube_video_id id, title, views FROM videos WHERE channel_id = ? AND status = 'published' AND youtube_video_id IS NOT NULL "
+        "ORDER BY views DESC LIMIT 20", (channel_id,))]
+    live = _live_about(conn, channel_id, services)
+    # What the channel really publishes outranks the niche it was filed under in the hub.
     prompt = "\n".join(filter(None, [
-        f"Write the YouTube channel 'About' description and search keywords for the channel \"{row['name']}\".",
-        f"Niche: {spec.name}. Audience and tone: {spec.audience_and_tone}" if spec else "",
-        f"On-screen language: {spec.language}. Write the description in that language (Hindi channels: Hindi, may mix in English keywords)." if spec else "",
-        "Recent video titles: " + "; ".join(titles) if titles else "",
-        "Say what viewers get and how often, invite them to subscribe. No made-up facts, numbers or links, no < or > characters, no hashtags.",
+        f"Set up the YouTube channel \"{row['name']}\"{' (' + row['handle'] + ')' if row['handle'] else ''}. Fill every field of the schema.",
+        "WHAT THE CHANNEL ACTUALLY IS (most important; match its audience, topics and language exactly):",
+        f"- Its current About text on YouTube: \"{live['description']}\"" if live.get("description") else "",
+        f"- Its current keywords: {', '.join(live['keywords'])}" if live.get("keywords") else "",
+        "- Its video titles: " + "; ".join(titles) if titles else "",
+        "- If the titles or About text are in Hinglish, write in Hinglish; if they are for children, write for parents and children.",
+        "HINT ONLY (ignore it where it disagrees with the above):",
+        f"- The hub files this channel under the niche {spec.name}: {spec.audience_and_tone} Language: {spec.language}." if spec else "",
+        "Public videos to choose the trailer from (id: title, views): " + "; ".join(f"{v['id']}: {v['title']} ({v['views']})" for v in public) if public else "",
+        "About text: say what viewers get and how often, then invite them to subscribe. Keep any good line from the current About text.",
+        "upload_defaults.language is the language spoken or shown in the videos.",
+        "Mark made_for_kids true only if the videos are made primarily for children under 13 (cartoon characters, kids' habits, rhymes); it is a legal setting under COPPA.",
+        "No made-up facts, numbers, links or email addresses. No < or > characters.",
     ]))
     try:
-        answer = client.generate_json(prompt, ABOUT_SCHEMA, temperature=0.7)
+        answer = client.generate_json(prompt, _setup_schema([v["id"] for v in public]), temperature=0.7)
     except GeminiError as e:
         raise ActionError(str(e))
-    description = re.sub(r"[<>]", "", answer.get("description", "")).strip()[:yt.ABOUT_LIMIT]
-    keywords = [k.strip() for k in answer.get("keywords", []) if k.strip()]
+    return _clean_setup(answer, {v["id"] for v in public})
+
+
+def _live_about(conn, channel_id: int, services=None) -> Dict[str, Any]:
+    """The channel's current About text and keywords from YouTube (1 quota unit); empty if unavailable."""
+    row = conn.execute("SELECT is_mock, connection FROM channels WHERE id = ?", (channel_id,)).fetchone()
+    if row["is_mock"] or row["connection"] != "connected":
+        return {}
+    try:
+        live = yt.channel_setup(_youtube(conn, channel_id, services))
+    except (ActionError, yt.YouTubeError):
+        return {}
+    _quota(conn, 1)
+    return {"description": live["description"], "keywords": live["keywords"]}
+
+
+def _clean_setup(answer: Dict[str, Any], trailer_ids) -> Dict[str, Any]:
+    """Keep the draft inside YouTube's limits and the window's choices."""
+    def text(value, limit):
+        return re.sub(r"[<>]", "", str(value or "")).strip()[:limit]
+
+    about = answer.get("about") or {}
+    keywords = [k.strip() for k in about.get("keywords") or [] if str(k).strip()]
     while keywords and len(yt.format_keywords(keywords)) > yt.KEYWORDS_LIMIT:
         keywords.pop()
-    return {"description": description, "keywords": keywords}
+    defaults_ = answer.get("upload_defaults") or {}
+    playlist = answer.get("playlist") or {}
+    trailer = answer.get("trailer_video_id") or ""
+    return {
+        "about": {
+            "description": text(about.get("description"), yt.ABOUT_LIMIT),
+            "keywords": keywords,
+            "country": about.get("country") if about.get("country") in COUNTRIES else "",
+            "language": about.get("language") if about.get("language") in LANGUAGES else "",
+        },
+        "trailer_video_id": trailer if trailer in trailer_ids else "",
+        "playlist": {"title": text(playlist.get("title"), 150), "description": text(playlist.get("description"), 5000)},
+        "upload_defaults": {
+            "category_id": defaults_.get("category_id") if defaults_.get("category_id") in CATEGORIES else "",
+            "language": defaults_.get("language") if defaults_.get("language") in LANGUAGES else "",
+            "made_for_kids": bool(defaults_.get("made_for_kids")),
+            "synthetic_media": True,  # the scripts are AI-written, so this is always declared
+            "default_tags": [text(t, 60) for t in defaults_.get("default_tags") or [] if str(t).strip()][:5],
+            "description_footer": text(defaults_.get("description_footer"), 1000),
+        },
+    }
 
 
 # ---------- helpers ----------

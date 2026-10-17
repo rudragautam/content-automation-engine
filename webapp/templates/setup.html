@@ -11,12 +11,14 @@
     </div>
   </div>
   <div class="actions">
+    <button class="btn primary" type="button" id="generate-all" data-channel="{{ channel.id }}">✨ Generate with Gemini</button>
     {% if live %}<a class="btn small" href="https://www.youtube.com/channel/{{ live.id }}" target="_blank" rel="noopener">View on YouTube ↗</a>{% endif %}
     <a class="btn small" href="/channels/{{ channel.id }}" id="back-to-hub">Channel page</a>
     <button class="btn small" type="button" id="close-window">Close</button>
   </div>
 </header>
 
+<div class="notice gen-status" id="generate-status" role="status" hidden></div>
 {% if notice %}<div class="notice ok" role="status">{{ notice }}</div>{% endif %}
 {% if problem %}<div class="notice bad" role="alert">{{ problem }}</div>{% endif %}
 
@@ -62,17 +64,13 @@
         </label>
         <div class="form-row">
           <label class="field">Country
-            <select name="country"><option value="">Not set</option>{% for code, name in countries.items() %}<option value="{{ code }}" {{ 'selected' if live.country == code }}>{{ name }}</option>{% endfor %}</select>
+            <select name="country" id="about-country"><option value="">Not set</option>{% for code, name in countries.items() %}<option value="{{ code }}" {{ 'selected' if live.country == code }}>{{ name }}</option>{% endfor %}</select>
           </label>
           <label class="field">Channel language
-            <select name="language"><option value="">Not set</option>{% for code, name in languages.items() %}<option value="{{ code }}" {{ 'selected' if live.language == code }}>{{ name }}</option>{% endfor %}</select>
+            <select name="language" id="about-language"><option value="">Not set</option>{% for code, name in languages.items() %}<option value="{{ code }}" {{ 'selected' if live.language == code }}>{{ name }}</option>{% endfor %}</select>
           </label>
         </div>
-        <div class="form-actions">
-          <button class="btn" type="button" id="write-about" data-channel="{{ channel.id }}">✨ Write with Gemini</button>
-          <span class="muted" id="write-about-status" role="status"></span>
-          <button class="btn primary" type="submit">Save to YouTube</button>
-        </div>
+        <div class="form-actions"><span></span><button class="btn primary" type="submit">Save to YouTube</button></div>
       </form>
     </section>
 
@@ -110,7 +108,7 @@
       {% if videos %}
       <form method="post" action="/channels/{{ channel.id }}/setup/trailer" class="form-row">
         <label class="field" style="flex:1">Trailer video
-          <select name="video_id">
+          <select name="video_id" id="trailer-video">
             <option value="">No trailer</option>
             {% for v in videos %}<option value="{{ v.id }}" {{ 'selected' if live.trailer == v.id }}>{{ v.title }}</option>{% endfor %}
           </select>
@@ -148,14 +146,14 @@
       <form method="post" action="/channels/{{ channel.id }}/setup/playlist" class="setup-form">
         <div class="form-row">
           <label class="field" style="flex:2;min-width:220px">Title
-            <input type="text" name="title" required maxlength="150" placeholder="e.g. Daily Focus Habits">
+            <input type="text" name="title" id="playlist-title" required maxlength="150" placeholder="e.g. Daily Focus Habits">
           </label>
           <label class="field">Visibility
             <select name="privacy">{% for k, v in privacy.items() %}<option value="{{ k }}">{{ v }}</option>{% endfor %}</select>
           </label>
         </div>
         <label class="field">Description (optional)
-          <textarea name="description" rows="2" maxlength="5000"></textarea>
+          <textarea name="description" id="playlist-description" rows="2" maxlength="5000"></textarea>
         </label>
         <div class="form-actions">
           <label class="check"><input type="checkbox" name="use_for_uploads" value="yes" {{ 'checked' if not prefs.playlist_id }}> Add every new upload to it</label>
@@ -171,10 +169,10 @@
       <form method="post" action="/channels/{{ channel.id }}/setup/defaults" class="setup-form">
         <div class="form-row">
           <label class="field">Category
-            <select name="category_id">{% for k, v in categories.items() %}<option value="{{ k }}" {{ 'selected' if prefs.category_id == k }}>{{ v }}</option>{% endfor %}</select>
+            <select name="category_id" id="defaults-category">{% for k, v in categories.items() %}<option value="{{ k }}" {{ 'selected' if prefs.category_id == k }}>{{ v }}</option>{% endfor %}</select>
           </label>
           <label class="field">Video language
-            <select name="language">{% for k, v in languages.items() %}<option value="{{ k }}" {{ 'selected' if prefs.language == k }}>{{ v }}</option>{% endfor %}</select>
+            <select name="language" id="defaults-language">{% for k, v in languages.items() %}<option value="{{ k }}" {{ 'selected' if prefs.language == k }}>{{ v }}</option>{% endfor %}</select>
           </label>
         </div>
         <fieldset class="field">
@@ -189,11 +187,11 @@
           <label class="check"><input type="radio" name="synthetic_media" value="no" {{ 'checked' if not prefs.synthetic_media }}> Don't declare</label>
         </fieldset>
         <label class="field">Tags added to every video
-          <input type="text" name="default_tags" value="{{ prefs.default_tags | join(', ') }}" placeholder="e.g. {{ channel.name | lower }}, shorts">
+          <input type="text" name="default_tags" id="defaults-tags" value="{{ prefs.default_tags | join(', ') }}" placeholder="e.g. {{ channel.name | lower }}, shorts">
           <span class="hint">Comma separated; added after each video's own tags.</span>
         </label>
         <label class="field">Text added to the end of every description
-          <textarea name="description_footer" rows="4" maxlength="1000" placeholder="e.g. Subscribe for a new video every day.&#10;#shorts">{{ prefs.description_footer }}</textarea>
+          <textarea name="description_footer" id="defaults-footer" rows="4" maxlength="1000" placeholder="e.g. Subscribe for a new video every day.&#10;#shorts">{{ prefs.description_footer }}</textarea>
         </label>
         <div class="form-actions"><span></span><button class="btn primary" type="submit">Save defaults</button></div>
       </form>
@@ -223,19 +221,63 @@
   const desc = document.getElementById("about-description"), count = document.getElementById("about-count");
   desc?.addEventListener("input", () => { count.textContent = desc.value.length; });
 
-  const write = document.getElementById("write-about");
-  write?.addEventListener("click", async () => {
-    const status = document.getElementById("write-about-status");
-    write.disabled = true; status.textContent = "Gemini is writing…";
+  // One click fills every text field; nothing reaches YouTube until a section's Save is pressed.
+  const gen = document.getElementById("generate-all"), genStatus = document.getElementById("generate-status");
+  const touched = new Set();
+  function put(id, value) {
+    const field = document.getElementById(id);
+    if (!field || value === undefined || value === null || value === "") return;
+    if (field.tagName === "SELECT" && ![...field.options].some((o) => o.value === value)) return;
+    field.value = value;
+    field.classList.add("ai-filled");
+    touched.add(field.closest(".setup-section"));
+  }
+  function check(name, value) {
+    const radio = document.querySelector(`input[name="${name}"][value="${value}"]`);
+    if (!radio) return;
+    radio.checked = true;
+    radio.closest("fieldset").classList.add("ai-filled");
+    touched.add(radio.closest(".setup-section"));
+  }
+  gen.addEventListener("click", async () => {
+    gen.disabled = true;
+    genStatus.hidden = false; genStatus.className = "notice gen-status";
+    genStatus.textContent = "Gemini is writing the channel setup… this takes about 10–20 seconds.";
     try {
-      const res = await fetch(`/api/channels/${write.dataset.channel}/setup/write-about`, { method: "POST" });
+      const res = await fetch(`/api/channels/${gen.dataset.channel}/setup/generate`, { method: "POST" });
       const data = await res.json();
       if (!res.ok) throw new Error(data.error || "Gemini couldn't write it.");
-      desc.value = data.description; count.textContent = desc.value.length;
-      document.getElementById("about-keywords").value = data.keywords.join(", ");
-      status.textContent = "Draft filled in. Read it, edit, then Save to YouTube.";
-    } catch (e) { status.textContent = e.message; }
-    write.disabled = false;
+      touched.clear();
+      document.querySelectorAll(".ai-filled").forEach((el) => el.classList.remove("ai-filled"));
+      put("about-description", data.about.description);
+      if (desc) count.textContent = desc.value.length;
+      put("about-keywords", data.about.keywords.join(", "));
+      put("about-country", data.about.country);
+      put("about-language", data.about.language);
+      put("trailer-video", data.trailer_video_id);
+      put("playlist-title", data.playlist.title);
+      put("playlist-description", data.playlist.description);
+      const d = data.upload_defaults;
+      put("defaults-category", d.category_id);
+      put("defaults-language", d.language);
+      check("made_for_kids", d.made_for_kids ? "yes" : "no");
+      check("synthetic_media", d.synthetic_media ? "yes" : "no");
+      put("defaults-tags", d.default_tags.join(", "));
+      put("defaults-footer", d.description_footer);
+      document.querySelectorAll(".ai-badge").forEach((b) => b.remove());
+      touched.forEach((section) => {
+        const badge = document.createElement("span");
+        badge.className = "ai-badge"; badge.textContent = "✨ Filled by Gemini · review and save";
+        section.querySelector(".card-head").appendChild(badge);
+      });
+      genStatus.className = "notice ok gen-status";
+      genStatus.textContent = `Gemini filled ${touched.size} section${touched.size === 1 ? "" : "s"}. Nothing is on YouTube yet: read each one, edit what you like, then press its Save button.` +
+        (data.upload_defaults.made_for_kids ? " It marked the videos as made for kids; check that before saving." : "");
+      [...touched][0]?.scrollIntoView({ behavior: "smooth", block: "start" });
+    } catch (e) {
+      genStatus.className = "notice bad gen-status"; genStatus.textContent = e.message;
+    }
+    gen.disabled = false;
   });
 })();
 </script>

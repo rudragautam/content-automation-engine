@@ -303,3 +303,7 @@ fieldset.field legend { font-weight: 600; color: var(--ink-2); margin-bottom: 4p
   .setup-nav { position: static; display: flex; flex-wrap: wrap; }
   .setup-nav p { display: none; }
 }
+.ai-filled { outline: 2px solid var(--accent); outline-offset: 1px; background: var(--accent-wash); }
+fieldset.ai-filled { border-radius: 8px; padding: 6px 8px; }
+.ai-badge { margin-left: auto; font-size: 12px; font-weight: 600; color: var(--accent-ink); background: var(--accent-wash); padding: 2px 8px; border-radius: 999px; }
+.gen-status { margin-bottom: 14px; }
