@@ -16,6 +16,7 @@ from markupsafe import Markup
 from content_templates import NICHES, workbook_bytes
 from publishing.youtube import YouTubeError
 from webapp import ai_drafts, analytics, db, mock, queue, timeutil, youtube_sync
+from webapp.paging import paginate
 from webapp.queue import ActionError
 
 HERE = os.path.dirname(os.path.abspath(__file__))
@@ -123,7 +124,7 @@ def channel_page(request: Request, channel_id: int, days: int = 28, notice: str 
             subs_series=analytics.daily_series(conn, days, channel_id, "net_subs"),
             top=analytics.top_videos(conn, days, channel_id, 8),
             heatmap=analytics.timing_heatmap(conn, 90, channel_id),
-            queue=[dict(r) for r in queue_rows], slots=queue.slots(conn, channel_id),
+            queue=paginate([dict(r) for r in queue_rows], request.query_params, "qpage", 20, anchor="queue"), slots=queue.slots(conn, channel_id),
             can_render=queue.can_render(channel["niche"]),
             notice=notice, problem=problem, client_ready=os.path.exists(youtube_sync.client_path()),
         )
@@ -132,12 +133,16 @@ def channel_page(request: Request, channel_id: int, days: int = 28, notice: str 
 @app.get("/schedule")
 def schedule_page(request: Request, channel: int = 0):
     with db.session() as conn:
-        items = _upcoming(conn, hours=24 * 14, channel_id=channel or None)
+        upcoming = _upcoming(conn, hours=24 * 14, limit=5000, channel_id=channel or None)
+        day_totals = {}
+        for item in upcoming:
+            day_totals[item["publish_at"][:10]] = day_totals.get(item["publish_at"][:10], 0) + 1
+        items = paginate(upcoming, request.query_params, "page", 50)
         groups = {}
         for item in items:
             groups.setdefault(item["publish_at"][:10], []).append(item)
         return page(
-            request, "schedule.html", groups=groups, channel_filter=channel,
+            request, "schedule.html", groups=groups, day_totals=day_totals, items=items, channel_filter=channel,
             channels=[dict(r) for r in conn.execute("SELECT id, name FROM channels ORDER BY name")],
             quota=analytics.quota_today(conn),
         )
@@ -146,7 +151,7 @@ def schedule_page(request: Request, channel: int = 0):
 @app.get("/content")
 def content_page(request: Request, niche: str = "", problem: str = ""):
     with db.session() as conn:
-        return page(request, "content.html", **_content_ctx(conn, niche), gen_problem=problem)
+        return page(request, "content.html", **_content_ctx(conn, niche, request.query_params), gen_problem=problem)
 
 
 @app.post("/content/{niche}/generate")
@@ -239,7 +244,7 @@ def content_template(niche: str):
 @app.get("/audio")
 def audio_page(request: Request, niche: str = ""):
     with db.session() as conn:
-        return page(request, "audio.html", **_audio_ctx(conn, niche))
+        return page(request, "audio.html", **_audio_ctx(conn, niche, request.query_params))
 
 
 @app.post("/audio/{niche}")
@@ -294,7 +299,7 @@ def audio_file(audio_id: int):
 @app.get("/media")
 def media_page(request: Request, niche: str = "", status: str = ""):
     with db.session() as conn:
-        return page(request, "media.html", **_media_ctx(conn, niche, status))
+        return page(request, "media.html", **_media_ctx(conn, niche, status, request.query_params))
 
 
 @app.get("/media/video/{video_id}")
@@ -527,23 +532,25 @@ def _upcoming(conn, hours: int, limit: int = 500, channel_id: int = None):
     return [dict(r) for r in rows]
 
 
-def _content_ctx(conn, niche: str):
+def _content_ctx(conn, niche: str, query=None):
+    query = query or {}
     niche = niche if niche in NICHES else next(iter(NICHES))
     spec = NICHES[niche]
     channels = [dict(r) for r in conn.execute("SELECT id, name, connection FROM channels WHERE niche = ? ORDER BY name", (niche,))]
     counts = {r["niche"]: r["n"] for r in conn.execute(
         "SELECT c.niche, COUNT(*) n FROM videos v JOIN channels c ON c.id = v.channel_id WHERE v.status IN ('ready','rendered') GROUP BY c.niche")}
     uploads = [dict(r) for r in conn.execute(
-        "SELECT u.*, c.name channel_name FROM uploads u LEFT JOIN channels c ON c.id = u.channel_id WHERE u.niche = ? ORDER BY u.id DESC LIMIT 20", (niche,))]
+        "SELECT u.*, c.name channel_name FROM uploads u LEFT JOIN channels c ON c.id = u.channel_id WHERE u.niche = ? ORDER BY u.id DESC", (niche,))]
     ready = [dict(r) for r in conn.execute(
         "SELECT v.id, v.title, v.status, v.publish_at, v.error, v.channel_id, v.content_json, v.is_mock, v.youtube_video_id, c.name channel_name, u.filename source "
         "FROM videos v JOIN channels c ON c.id = v.channel_id LEFT JOIN uploads u ON u.id = v.upload_id "
         "WHERE c.niche = ? AND v.status IN ('ready','rendering','rendered','failed') AND v.is_mock = 0 ORDER BY v.publish_at", (niche,))]
     return {
         "niches": [{"id": k, "name": s.name, "aspect": s.aspect_ratio, "pending": counts.get(k, 0), "renders": queue.can_render(k)} for k, s in NICHES.items()],
-        "niche": niche, "spec": spec, "channels": channels, "uploads": uploads, "ready": ready,
+        "niche": niche, "spec": spec, "channels": channels,
+        "uploads": paginate(uploads, query, "hpage", 10, anchor="history"), "ready": paginate(ready, query, "page", 20, anchor="ready"),
         "can_render": queue.can_render(niche),
-        "gemini": ai_drafts.status(conn), "drafts": ai_drafts.recent(conn, niche),
+        "gemini": ai_drafts.status(conn), "drafts": paginate(ai_drafts.recent(conn, niche, limit=10000), query, "dpage", 8, anchor="generate"),
         "items_text": f"{spec.items.min_count}–{spec.items.max_count} {spec.items.label}s" if spec.items.min_count != spec.items.max_count else f"{spec.items.min_count} {spec.items.label}s",
     }
 
@@ -551,7 +558,7 @@ def _content_ctx(conn, niche: str):
 MEDIA_FILTERS = {"rendered": ("rendered",), "youtube": ("uploading", "scheduled", "published")}
 
 
-def _media_ctx(conn, niche: str, status: str):
+def _media_ctx(conn, niche: str, status: str, query=None):
     """Every rendered video file on this PC, newest first, with its size and shape."""
     rows = conn.execute(
         "SELECT v.id, v.title, v.status, v.publish_at, v.duration_s, v.video_path, v.youtube_video_id, v.channel_id, "
@@ -576,15 +583,15 @@ def _media_ctx(conn, niche: str, status: str):
     return {
         "niches": [{"id": k, "name": s.name, "count": counts.get(k, 0)} for k, s in NICHES.items()],
         "niche": niche, "status": status, "all_count": len(videos),
-        "videos": shown, "shown_seconds": sum(v["duration_s"] or 0 for v in shown), "shown_bytes": sum(v["size"] for v in shown),
+        "videos": paginate(shown, query or {}, "page", 20), "shown_seconds": sum(v["duration_s"] or 0 for v in shown), "shown_bytes": sum(v["size"] for v in shown),
     }
 
 
-def _audio_ctx(conn, niche: str):
+def _audio_ctx(conn, niche: str, query=None):
     niche = niche if niche in NICHES else next(iter(NICHES))
     counts = {r["niche"]: r["n"] for r in conn.execute("SELECT niche, COUNT(*) n FROM audio GROUP BY niche")}
     tracks = [dict(r) for r in conn.execute("SELECT * FROM audio WHERE niche = ? ORDER BY uploaded_at DESC", (niche,))]
     return {
         "niches": [{"id": k, "name": s.name, "tracks": counts.get(k, 0)} for k, s in NICHES.items()],
-        "niche": niche, "niche_label": NICHES[niche].name, "tracks": tracks,
+        "niche": niche, "niche_label": NICHES[niche].name, "tracks": paginate(tracks, query or {}, "page", 20),
     }

@@ -1,5 +1,5 @@
 {% extends "base.html" %}
-{% from "_macros.html" import status as status_chip %}
+{% from "_macros.html" import status as status_chip, pager %}
 {% block title %}Media library{% endblock %}
 {% macro mmss(s) -%}{{ '%d:%02d' % (((s or 0) // 60) | int, ((s or 0) % 60) | int) }}{%- endmacro %}
 {% block content %}
@@ -22,7 +22,7 @@
 
 <section class="card">
   {% if videos %}
-  <div class="card-head"><h2>Videos</h2><span class="muted">{{ videos | length }} · {{ mmss(shown_seconds) }} in total · {{ shown_bytes | filesizeformat }}</span></div>
+  <div class="card-head"><h2>Videos</h2><span class="muted">{{ videos.total }} · {{ mmss(shown_seconds) }} in total · {{ shown_bytes | filesizeformat }}</span></div>
   <div class="table-wrap"><table class="media-list">
     <thead><tr><th>Video</th><th>Format</th><th class="r">Length</th><th>Status</th><th>Publishes</th><th>Music</th><th class="r">Size</th><th class="r"></th></tr></thead>
     <tbody>{% for v in videos %}
@@ -40,6 +40,7 @@
       </tr>
     {% endfor %}</tbody>
   </table></div>
+  {{ pager(videos, "videos") }}
   {% else %}
   <div class="empty">{% if all_count %}No videos match these filters.{% else %}No rendered videos yet. Queue content on the <a href="/content">Content</a> page and press Render.{% endif %}</div>
   {% endif %}

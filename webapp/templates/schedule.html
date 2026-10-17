@@ -1,11 +1,11 @@
 {% extends "base.html" %}
-{% from "_macros.html" import queue_row %}
+{% from "_macros.html" import queue_row, pager %}
 {% block title %}Schedule{% endblock %}
 {% block content %}
 <div class="page-head">
   <div>
     <h1>Schedule</h1>
-    <div class="sub">Next 14 days across {{ 'all channels' if not channel_filter else 'one channel' }}. Change any time with Edit.</div>
+    <div class="sub">Next 14 days across {{ 'all channels' if not channel_filter else 'one channel' }}{% if items.total %} · {{ items.total }} video{{ '' if items.total == 1 else 's' }}{% endif %}. Change any time with Edit.</div>
   </div>
   <form class="filters" method="get" action="/schedule">
     <label class="field" style="grid-auto-flow:column;align-items:center;gap:8px">Channel
@@ -22,7 +22,7 @@
 
 {% for day, items in groups.items() %}
 <section class="day-group">
-  <h3>{{ (day ~ 'T00:00') | when | replace(', 00:00', '') }} · {{ items | length }} video{{ '' if items | length == 1 else 's' }}</h3>
+  <h3>{{ (day ~ 'T00:00') | when | replace(', 00:00', '') }} · {{ day_totals[day] }} video{{ '' if day_totals[day] == 1 else 's' }}{% if items | length < day_totals[day] %} <span class="muted">(split across pages)</span>{% endif %}</h3>
   <div class="card" style="padding-top:6px;padding-bottom:6px">
     <div class="table-wrap"><table>
       <tbody>{% for v in items %}{{ queue_row(v, true, v.niche in renderable) }}{% endfor %}</tbody>
@@ -32,4 +32,5 @@
 {% else %}
 <div class="card empty">Nothing scheduled in the next 14 days.</div>
 {% endfor %}
+{{ pager(items, "videos") }}
 {% endblock %}

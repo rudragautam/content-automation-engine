@@ -1,5 +1,5 @@
 {% extends "base.html" %}
-{% from "_macros.html" import queue_row %}
+{% from "_macros.html" import queue_row, pager %}
 {% block title %}Content{% endblock %}
 {% block content %}
 <div class="page-head">
@@ -97,26 +97,29 @@
       <td class="num">{{ d.created_at | when }}</td></tr>
     {% endfor %}</tbody>
   </table></div>
+  {{ pager(drafts, "drafts") }}
   {% endif %}
 </section>
 
-<section class="card section">
-  <div class="card-head"><h2>Uploaded content waiting for render or upload</h2><span class="muted">{{ ready | length }}</span></div>
+<section class="card section" id="ready">
+  <div class="card-head"><h2>Uploaded content waiting for render or upload</h2><span class="muted">{{ ready.total }}</span></div>
   {% if ready %}
   <div class="table-wrap"><table>
     <thead><tr><th>Publish time</th><th>Video</th><th>Status</th><th class="r">Actions</th></tr></thead>
     <tbody>{% for v in ready %}{{ queue_row(v, true, can_render) }}{% endfor %}</tbody>
   </table></div>
+  {{ pager(ready, "videos") }}
   {% else %}<div class="empty">Nothing waiting. Uploaded rows appear here until they're scheduled on YouTube.</div>{% endif %}
 </section>
 
-<section class="card section">
-  <div class="card-head"><h2>Upload history</h2></div>
+<section class="card section" id="history">
+  <div class="card-head"><h2>Upload history</h2>{% if uploads %}<span class="muted">{{ uploads.total }}</span>{% endif %}</div>
   {% if uploads %}
   <div class="table-wrap"><table>
     <thead><tr><th>File</th><th>Channel</th><th class="r">Videos</th><th>Uploaded</th></tr></thead>
     <tbody>{% for u in uploads %}<tr><td>{{ u.filename }}</td><td>{{ u.channel_name or '—' }}</td><td class="r num">{{ u.videos_added }}</td><td class="num">{{ u.uploaded_at | when }}</td></tr>{% endfor %}</tbody>
   </table></div>
+  {{ pager(uploads, "uploads") }}
   {% else %}<div class="empty">No uploads for this niche yet.</div>{% endif %}
 </section>
 {% endblock %}

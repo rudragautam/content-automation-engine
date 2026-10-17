@@ -1,5 +1,5 @@
 {% extends "base.html" %}
-{% from "_macros.html" import delta_short, connection, delta, range_filter, queue_row, status %}
+{% from "_macros.html" import delta_short, connection, delta, range_filter, queue_row, status, pager %}
 {% block title %}{{ channel.name }}{% endblock %}
 {% block content %}
 <div class="page-head">
@@ -68,6 +68,7 @@
     <thead><tr><th>Publish time</th><th>Video</th><th>Status</th><th class="r">Actions</th></tr></thead>
     <tbody>{% for v in queue %}{{ queue_row(v, false, can_render) }}{% endfor %}</tbody>
   </table></div>
+  {{ pager(queue, "videos") }}
   {% else %}<div class="empty">Nothing queued. <a href="/content?niche={{ channel.niche }}">Upload a content sheet</a> to fill this channel's slots.</div>{% endif %}
 </section>
 

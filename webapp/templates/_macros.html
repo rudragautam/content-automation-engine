@@ -74,3 +74,16 @@
 <span class="delta {{ 'up' if r > 0 else 'down' if r < 0 }}">{{ '▲ ' if r > 0 else '▼ ' if r < 0 }}{{ '%+d' % r if r else '0' }}%</span>
 {%- endif -%}
 {%- endmacro %}
+
+{% macro pager(p, label="items") -%}
+{%- if p.pages > 1 %}
+<nav class="pager" aria-label="Pages">
+  <span class="muted">{{ p.start }}–{{ p.end }} of {{ p.total }} {{ label }}</span>
+  <div class="pager-links">
+    {% if p.number > 1 %}<a class="btn small" href="{{ p.href(p.number - 1) }}" rel="prev">‹ Prev</a>{% else %}<span class="btn small" aria-disabled="true">‹ Prev</span>{% endif %}
+    {% for n in p.window() %}{% if n is none %}<span class="muted gap">…</span>{% elif n == p.number %}<span class="btn small primary" aria-current="page">{{ n }}</span>{% else %}<a class="btn small" href="{{ p.href(n) }}">{{ n }}</a>{% endif %}{% endfor %}
+    {% if p.number < p.pages %}<a class="btn small" href="{{ p.href(p.number + 1) }}" rel="next">Next ›</a>{% else %}<span class="btn small" aria-disabled="true">Next ›</span>{% endif %}
+  </div>
+</nav>
+{%- endif %}
+{%- endmacro %}
