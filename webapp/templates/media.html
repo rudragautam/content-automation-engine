@@ -2,28 +2,11 @@
 {% from "_macros.html" import status as status_chip %}
 {% block title %}Media library{% endblock %}
 {% macro mmss(s) -%}{{ '%d:%02d' % (((s or 0) // 60) | int, ((s or 0) % 60) | int) }}{%- endmacro %}
-{% macro card(v) -%}
-<article class="media-card">
-  <div class="media-frame {{ 'tall' if v.aspect == '9:16' else 'wide' }}">
-    <video controls preload="metadata" src="/media/video/{{ v.id }}#t=1.5"></video>
-  </div>
-  <div class="media-body">
-    <div class="cell-title" title="{{ v.title }}">{{ v.title }}</div>
-    <div class="cell-sub"><a href="/channels/{{ v.channel_id }}">{{ v.channel_name }}</a> · {{ niche_name(v.niche) }}</div>
-    <div>{{ status_chip(v.status) }} <span class="muted num">{{ mmss(v.duration_s) }} · {{ v.size | filesizeformat }}</span></div>
-    <div class="cell-sub">{% if v.publish_at %}Publishes {{ v.publish_at | when }} · {% endif %}{{ ('♪ ' ~ v.audio_title) if v.audio_title else 'no music' }}</div>
-    <div class="actions">
-      <a class="btn small" href="/media/video/{{ v.id }}?download=1">Download</a>
-      {% if v.youtube_video_id %}<a class="btn small" href="https://studio.youtube.com/video/{{ v.youtube_video_id }}/edit" target="_blank" rel="noopener">YouTube Studio</a>{% endif %}
-    </div>
-  </div>
-</article>
-{%- endmacro %}
 {% block content %}
 <div class="page-head">
   <div>
     <h1>Media library</h1>
-    <div class="sub">Every rendered video on this PC. Play it here, download it, or open its channel to upload it.</div>
+    <div class="sub">Every rendered video on this PC. Click a video to play it.</div>
   </div>
 </div>
 
@@ -37,21 +20,59 @@
   {% endfor %}
 </nav>
 
-{% if shown_count %}
-<p class="secondary" style="margin-bottom:14px">{{ shown_count }} video{{ '' if shown_count == 1 else 's' }} · {{ mmss(shown_seconds) }} in total · {{ shown_bytes | filesizeformat }}</p>
-{% if shorts %}
-<section class="section">
-  <div class="card-head"><h2>Shorts (9:16)</h2><span class="muted">{{ shorts | length }}</span></div>
-  <div class="media-grid">{% for v in shorts %}{{ card(v) }}{% endfor %}</div>
+<section class="card">
+  {% if videos %}
+  <div class="card-head"><h2>Videos</h2><span class="muted">{{ videos | length }} · {{ mmss(shown_seconds) }} in total · {{ shown_bytes | filesizeformat }}</span></div>
+  <div class="table-wrap"><table class="media-list">
+    <thead><tr><th>Video</th><th>Format</th><th class="r">Length</th><th>Status</th><th>Publishes</th><th>Music</th><th class="r">Size</th><th class="r"></th></tr></thead>
+    <tbody>{% for v in videos %}
+      <tr class="media-row" tabindex="0" data-play="{{ v.id }}" data-title="{{ v.title }}" data-sub="{{ v.channel_name }} · {{ niche_name(v.niche) }}" data-aspect="{{ v.aspect }}">
+        <td><div class="cell-title clip" title="{{ v.title }}">{{ v.title }}</div>
+            <div class="cell-sub"><a href="/channels/{{ v.channel_id }}">{{ v.channel_name }}</a> · {{ niche_name(v.niche) }}</div></td>
+        <td class="secondary">{{ 'Short · 9:16' if v.aspect == '9:16' else '16:9' }}</td>
+        <td class="r num">{{ mmss(v.duration_s) }}</td>
+        <td>{{ status_chip(v.status) }}</td>
+        <td class="num">{{ v.publish_at | when }}</td>
+        <td class="secondary clip" style="max-width:140px" title="{{ v.audio_title or '' }}">{{ v.audio_title or '—' }}</td>
+        <td class="r num">{{ v.size | filesizeformat }}</td>
+        <td class="r nowrap"><button class="btn small primary" type="button" data-play-button>▶ Play</button>
+          <a class="btn small" href="/media/video/{{ v.id }}?download=1">Download</a></td>
+      </tr>
+    {% endfor %}</tbody>
+  </table></div>
+  {% else %}
+  <div class="empty">{% if all_count %}No videos match these filters.{% else %}No rendered videos yet. Queue content on the <a href="/content">Content</a> page and press Render.{% endif %}</div>
+  {% endif %}
 </section>
-{% endif %}
-{% if wide %}
-<section class="section">
-  <div class="card-head"><h2>Videos (16:9)</h2><span class="muted">{{ wide | length }}</span></div>
-  <div class="media-grid wide">{% for v in wide %}{{ card(v) }}{% endfor %}</div>
-</section>
-{% endif %}
-{% else %}
-<section class="card"><div class="empty">{% if all_count %}No videos match these filters.{% else %}No rendered videos yet. Queue content on the <a href="/content">Content</a> page and press Render.{% endif %}</div></section>
-{% endif %}
+
+<dialog class="player" id="player" aria-labelledby="player-title">
+  <div class="player-head">
+    <div><div class="cell-title" id="player-title"></div><div class="cell-sub" id="player-sub"></div></div>
+    <div class="actions"><a class="btn small" id="player-download" href="#">Download</a><button class="btn small" type="button" id="player-close" aria-label="Close">✕</button></div>
+  </div>
+  <div class="player-frame"><video id="player-video" controls playsinline></video></div>
+</dialog>
+
+<script>
+(() => {
+  const dialog = document.getElementById("player"), video = document.getElementById("player-video");
+  function open(row) {
+    const id = row.dataset.play;
+    document.getElementById("player-title").textContent = row.dataset.title;
+    document.getElementById("player-sub").textContent = row.dataset.sub;
+    document.getElementById("player-download").href = `/media/video/${id}?download=1`;
+    dialog.dataset.aspect = row.dataset.aspect;
+    video.src = `/media/video/${id}`;
+    dialog.showModal();
+    video.play().catch(() => {});
+  }
+  document.querySelectorAll(".media-row").forEach(row => {
+    row.addEventListener("click", e => { if (!e.target.closest("a")) open(row); });
+    row.addEventListener("keydown", e => { if (e.key === "Enter" || e.key === " ") { e.preventDefault(); open(row); } });
+  });
+  document.getElementById("player-close").addEventListener("click", () => dialog.close());
+  dialog.addEventListener("click", e => { if (e.target === dialog) dialog.close(); });  // click outside the player
+  dialog.addEventListener("close", () => { video.pause(); video.removeAttribute("src"); video.load(); });
+})();
+</script>
 {% endblock %}

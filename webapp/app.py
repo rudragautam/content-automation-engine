@@ -576,8 +576,7 @@ def _media_ctx(conn, niche: str, status: str):
     return {
         "niches": [{"id": k, "name": s.name, "count": counts.get(k, 0)} for k, s in NICHES.items()],
         "niche": niche, "status": status, "all_count": len(videos),
-        "shorts": [v for v in shown if v["aspect"] == "9:16"], "wide": [v for v in shown if v["aspect"] != "9:16"],
-        "shown_count": len(shown), "shown_seconds": sum(v["duration_s"] or 0 for v in shown), "shown_bytes": sum(v["size"] for v in shown),
+        "videos": shown, "shown_seconds": sum(v["duration_s"] or 0 for v in shown), "shown_bytes": sum(v["size"] for v in shown),
     }
 
 

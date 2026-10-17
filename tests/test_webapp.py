@@ -109,11 +109,11 @@ class TestPages(HubTestCase):
         with db.session() as conn:
             conn.execute("UPDATE videos SET status = 'rendered', video_path = ?, duration_s = 20 WHERE id = ?", (path, vid))
         page = self.client.get("/media").text
-        self.assertIn(f"/media/video/{vid}#t=1.5", page)
-        self.assertIn("Shorts (9:16)", page)
+        self.assertIn(f'data-play="{vid}"', page)
+        self.assertIn("Short · 9:16", page)
         self.assertIn("No videos match", self.client.get("/media?status=youtube").text)
         self.assertIn("No videos match", self.client.get("/media?niche=crime_files").text)
-        self.assertIn(f"/media/video/{vid}", self.client.get("/media?niche=focus_habits&status=rendered").text)
+        self.assertIn(f'data-play="{vid}"', self.client.get("/media?niche=focus_habits&status=rendered").text)
         r = self.client.get(f"/media/video/{vid}?download=1")
         self.assertEqual(r.status_code, 200)
         self.assertIn("attachment", r.headers["content-disposition"])
