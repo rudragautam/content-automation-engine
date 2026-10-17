@@ -96,13 +96,18 @@ def save_client_keys(client_id: str, client_secret: str, base_url: str) -> None:
 
 # ---------- channels ----------
 
-def add_channel(conn, name: str, niche: str, slots: str) -> int:
+def add_channel(conn, name: str, niche: str, slots: str, handle: str = "", angle: str = "") -> int:
+    from webapp.channel_names import ANGLE_LIMIT, handle as clean_handle
+
     name = name.strip()
     if not name:
         raise ActionError("Give the channel a name.")
     if niche not in NICHES:
         raise ActionError("Pick a niche.")
-    return _insert_channel(conn, name, niche, _publish_times(slots))
+    channel_id = _insert_channel(conn, name, niche, _publish_times(slots), clean_handle(handle) if handle.strip() else "")
+    if angle.strip():
+        conn.execute("UPDATE channels SET angle = ? WHERE id = ?", (angle.strip()[:ANGLE_LIMIT], channel_id))
+    return channel_id
 
 
 def _publish_times(slots: str) -> List[str]:

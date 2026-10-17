@@ -155,3 +155,72 @@ document.addEventListener("click", (e) => {
   const win = window.open(link.href, link.target, `width=${w},height=${h},left=${(screen.availWidth - w) / 2},top=20`);
   if (win) win.focus(); else location.href = link.href;  // popup blocked: open here instead
 });
+
+// Channel names from Gemini. A [data-name-suggest] box either fills the add-channel form ("fill"),
+// renames a planned channel ("rename") or copies the name for YouTube Studio ("copy").
+document.addEventListener("click", async (e) => {
+  const btn = e.target.closest("[data-name-suggest] [data-suggest]");
+  if (!btn) return;
+  const box = btn.closest("[data-name-suggest]");
+  const status = box.querySelector("[data-status]"), results = box.querySelector("[data-results]");
+  const body = new FormData();
+  body.append("idea", box.querySelector("[data-idea]").value);
+  if (box.dataset.channel) body.append("channel_id", box.dataset.channel);
+  if (box.dataset.nicheFrom) body.append("niche", document.querySelector(box.dataset.nicheFrom).value);
+  btn.disabled = true;
+  status.hidden = false; status.className = "notice gen-status";
+  status.textContent = "Gemini is thinking of names…";
+  try {
+    const res = await fetch("/api/channel-names", { method: "POST", body });
+    const data = await res.json();
+    if (!res.ok) throw new Error(data.error || "Gemini couldn't suggest names.");
+    results.replaceChildren(...data.names.map((n) => nameCard(box, n)));
+    status.className = "notice ok gen-status";
+    status.textContent = "Pick one, or press Suggest again for more. Check the @handle is free on YouTube when you create the channel.";
+  } catch (err) {
+    status.className = "notice bad gen-status"; status.textContent = err.message;
+  }
+  btn.disabled = false;
+});
+
+function nameCard(box, n) {
+  const card = document.createElement("div");
+  card.className = "name-card";
+  const title = document.createElement("strong"); title.textContent = n.name;
+  const handle = document.createElement("span"); handle.className = "muted"; handle.textContent = n.handle;
+  const angle = document.createElement("p"); angle.className = "secondary"; angle.textContent = n.angle;
+  const action = document.createElement("button");
+  action.type = "button"; action.className = "btn small";
+  const mode = box.dataset.mode;
+  if (mode === "fill") {
+    action.textContent = "Use this name";
+    action.addEventListener("click", () => {
+      for (const [key, value] of Object.entries({ name: n.name, handle: n.handle, angle: n.angle })) {
+        const field = document.querySelector(`${box.dataset.form} [name="${key}"]`);
+        if (field) { field.value = value; field.classList.add("ai-filled"); }
+      }
+      document.querySelector(box.dataset.form).scrollIntoView({ behavior: "smooth", block: "center" });
+    });
+  } else if (mode === "rename") {
+    action.textContent = "Rename to this";
+    action.className = "btn small primary";
+    action.addEventListener("click", () => {
+      const form = document.createElement("form");
+      form.method = "post"; form.action = `/channels/${box.dataset.channel}/setup/name`;
+      for (const [key, value] of Object.entries({ name: n.name, handle: n.handle, angle: n.angle })) {
+        const input = document.createElement("input"); input.type = "hidden"; input.name = key; input.value = value;
+        form.appendChild(input);
+      }
+      document.body.appendChild(form); form.submit();
+    });
+  } else {
+    action.textContent = "Copy name";
+    action.addEventListener("click", async () => {
+      try { await navigator.clipboard.writeText(n.name); toast(`Copied “${n.name}”. Paste it in YouTube Studio.`); }
+      catch (err) { toast("Couldn't copy; select the name and copy it."); }
+    });
+  }
+  const head = document.createElement("div"); head.className = "name-card-head"; head.append(title, handle);
+  card.append(head, angle, action);
+  return card;
+}

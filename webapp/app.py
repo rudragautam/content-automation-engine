@@ -15,7 +15,7 @@ from markupsafe import Markup
 
 from content_templates import NICHES, workbook_bytes
 from publishing.youtube import ABOUT_LIMIT as YT_ABOUT_LIMIT, YouTubeError
-from webapp import ai_drafts, analytics, channel_art, channel_setup, db, mock, queue, scope, timeutil, youtube_sync
+from webapp import ai_drafts, analytics, channel_art, channel_names, channel_setup, db, mock, queue, scope, timeutil, youtube_sync
 from webapp.paging import paginate
 from webapp.queue import ActionError
 
@@ -209,6 +209,21 @@ def setup_draft_discard(channel_id: int, kind: str):
     if kind in channel_art.KINDS:
         channel_art.discard(channel_id, kind)
     return _setup_back(channel_id, "branding")
+
+
+@app.post("/api/channel-names")
+def suggest_channel_names(niche: str = Form(""), idea: str = Form(""), channel_id: int = Form(0)):
+    try:
+        with db.session() as conn:
+            return {"names": channel_names.suggest(conn, niche, idea, channel_id or None)}
+    except ActionError as e:
+        return error(e)
+
+
+@app.post("/channels/{channel_id}/setup/name")
+def setup_name(channel_id: int, name: str = Form(""), handle: str = Form(""), angle: str = Form("")):
+    return _setup_action(channel_id, "name", f"Renamed to “{name.strip()}” in the hub.",
+                         lambda conn: channel_names.rename(conn, channel_id, name, handle, angle))
 
 
 @app.post("/api/channels/{channel_id}/setup/generate-art")
@@ -555,10 +570,10 @@ def settings_client_keys(request: Request, client_id: str = Form(""), client_sec
 
 
 @app.post("/settings/channels")
-def settings_add_channel(name: str = Form(""), niche: str = Form(""), slots: str = Form("")):
+def settings_add_channel(name: str = Form(""), niche: str = Form(""), slots: str = Form(""), handle: str = Form(""), angle: str = Form("")):
     try:
         with db.session() as conn:
-            channel_id = youtube_sync.add_channel(conn, name, niche, slots)
+            channel_id = youtube_sync.add_channel(conn, name, niche, slots, handle, angle)
         return RedirectResponse(f"/channels/{channel_id}", status_code=303)
     except ActionError as e:
         return RedirectResponse(f"/settings?problem={_q(e)}", status_code=303)
@@ -660,7 +675,7 @@ def _settings_ctx(conn, request: Request):
     return {
         "client": youtube_sync.client_status(str(request.base_url)),
         "gemini": ai_drafts.status(conn),
-        "channels": [dict(r) for r in conn.execute("SELECT id, name, niche, connection, is_mock, youtube_channel_id, last_synced_at FROM channels ORDER BY is_mock, name")],
+        "channels": [dict(r) for r in conn.execute("SELECT id, name, handle, angle, niche, connection, is_mock, youtube_channel_id, last_synced_at FROM channels ORDER BY is_mock, niche, name")],
         "mock_count": conn.execute("SELECT COUNT(*) FROM channels WHERE is_mock = 1").fetchone()[0],
         "niche_options": [(k, s.name) for k, s in NICHES.items()],
     }

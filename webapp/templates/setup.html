@@ -38,6 +38,7 @@
 
 <div class="setup-layout">
   <nav class="setup-nav" aria-label="Setup sections">
+    <a href="#name">Name &amp; handle</a>
     {% if live %}
     <a href="#about">About</a>
     {% endif %}
@@ -52,6 +53,29 @@
   </nav>
 
   <div class="setup-main">
+    <section class="card setup-section" id="name">
+      <div class="card-head"><h2>Name &amp; handle</h2><span class="muted">{{ niche_name(channel.niche) }}</span></div>
+      <p><strong>{{ live.title if live else channel.name }}</strong>{% set h = live.handle if live and live.handle else channel.handle %}{% if h %} <span class="muted">{{ h }}</span>{% endif %}</p>
+      {% if channel.angle %}<p class="secondary" style="margin-top:4px">{{ channel.angle }}</p>{% endif %}
+      {% if live %}
+      <p class="hint" style="margin:8px 0 10px">YouTube doesn't let apps change a channel's name or handle. Pick one here, copy it, then change it in
+        <a href="https://studio.youtube.com/channel/{{ live.id }}/editing/profile" target="_blank" rel="noopener">Studio → Customisation → Basic info ↗</a>. The next sync brings it into the hub.</p>
+      {% elif not channel.is_mock %}
+      <p class="hint" style="margin:8px 0 10px">Not on YouTube yet, so you can rename it here. Use the same name and handle when you create it on YouTube.</p>
+      {% endif %}
+      {% if not channel.is_mock %}
+      <div class="name-suggest" data-name-suggest data-mode="{{ 'copy' if live else 'rename' }}" data-channel="{{ channel.id }}">
+        <div class="form-row">
+          <label class="field" style="flex:1">Idea for Gemini (optional)
+            <input type="text" data-idea maxlength="300" placeholder="e.g. shorter, Hinglish, for parents">
+          </label>
+          <button class="btn" type="button" data-suggest>✨ Suggest names</button>
+        </div>
+        <div class="notice gen-status" data-status role="status" hidden></div>
+        <div class="name-cards" data-results></div>
+      </div>
+      {% endif %}
+    </section>
   {% if live %}
     <section class="card setup-section" id="about">
       <div class="card-head"><h2>About</h2><span class="muted">Shown on the channel's About tab and in search</span></div>

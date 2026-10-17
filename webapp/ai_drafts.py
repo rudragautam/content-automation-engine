@@ -111,12 +111,14 @@ def start_draft(conn, niche: str, channel_id: int, topic: str, count: int, instr
 def run_draft(draft_id: int, client=None) -> None:
     conn = db.connect()
     try:
-        d = conn.execute("SELECT d.*, c.name channel_name FROM drafts d JOIN channels c ON c.id = d.channel_id WHERE d.id = ?", (draft_id,)).fetchone()
+        d = conn.execute("SELECT d.*, c.name channel_name, c.angle FROM drafts d JOIN channels c ON c.id = d.channel_id WHERE d.id = ?", (draft_id,)).fetchone()
+        # Channels sharing a niche differ by their angle, so it steers every draft.
+        instructions = "\n".join(filter(None, [f"This channel's angle: {d['angle']}" if d["angle"] else "", d["instructions"]]))
         avoid = [r[0] for r in conn.execute(
             "SELECT v.title FROM videos v JOIN channels c ON c.id = v.channel_id WHERE c.niche = ? ORDER BY v.id DESC LIMIT ?", (d["niche"], AVOID_TITLES))]
         own = client or Gemini(api_key(), d["model"])
         try:
-            result = generate(own, get_spec(d["niche"]), d["topic"], d["count"], d["channel_name"], d["instructions"], avoid)
+            result = generate(own, get_spec(d["niche"]), d["topic"], d["count"], d["channel_name"], instructions, avoid)
         finally:
             if client is None:
                 own.close()

@@ -113,22 +113,34 @@
   {% else %}
   <p class="secondary" style="margin-bottom:14px">Save the OAuth client file above first.</p>
   {% endif %}
-  <details style="margin-bottom:14px">
-    <summary class="muted" style="cursor:pointer;font-size:12.5px">Channel not on YouTube yet? Add it by name and connect it later</summary>
-    <form method="post" action="/settings/channels" class="form-row" style="margin-top:8px">
-      <label class="field">Channel name <input type="text" name="name" required maxlength="100" placeholder="e.g. Focus Daily"></label>
+  <h3 style="margin-bottom:6px" id="plan">Plan a new channel</h3>
+  <p class="muted" style="font-size:12.5px;margin-bottom:8px">Not on YouTube yet? Pick a niche and let Gemini name it. A niche can have several channels; Gemini gives each new one its own angle. Connect it with Google once you've created it on YouTube.</p>
+  <div class="name-suggest" data-name-suggest data-mode="fill" data-niche-from="#plan-niche" data-form="#plan-form">
+    <div class="form-row">
       <label class="field">Niche
-        <select name="niche" required>{% for k, name in niche_options %}<option value="{{ k }}">{{ name }}</option>{% endfor %}</select>
+        <select id="plan-niche" name="niche" form="plan-form" required>{% for k, name in niche_options %}<option value="{{ k }}">{{ name }}</option>{% endfor %}</select>
       </label>
-      <label class="field">Publish times <input type="text" name="slots" value="19:00" placeholder="09:00, 19:00"></label>
-      <button class="btn" type="submit">Add channel</button>
-    </form>
-  </details>
+      <label class="field" style="flex:1;min-width:220px">Idea for Gemini (optional)
+        <input type="text" data-idea maxlength="300" placeholder="e.g. Hindi, for kids 6–10, animal stories">
+      </label>
+      <button class="btn" type="button" data-suggest>✨ Suggest names</button>
+    </div>
+    <div class="notice gen-status" data-status role="status" hidden></div>
+    <div class="name-cards" data-results></div>
+  </div>
+  <form method="post" action="/settings/channels" class="form-row" id="plan-form" style="margin:10px 0 18px">
+    <label class="field">Channel name <input type="text" name="name" required maxlength="100" placeholder="e.g. Focus Daily"></label>
+    <label class="field">@handle <input type="text" name="handle" maxlength="31" placeholder="@focusdaily"></label>
+    <label class="field" style="flex:1;min-width:220px">Angle <input type="text" name="angle" maxlength="160" placeholder="Who it's for and what makes it different"></label>
+    <label class="field">Publish times <input type="text" name="slots" value="19:00" placeholder="09:00, 19:00"></label>
+    <button class="btn primary" type="submit">Add channel</button>
+  </form>
   <div class="table-wrap"><table>
     <thead><tr><th>Channel</th><th>Niche</th><th>Connection</th><th>YouTube ID</th><th>Last sync</th><th></th></tr></thead>
     <tbody>{% for c in channels %}
       <tr>
-        <td><a class="cell-title" href="/channels/{{ c.id }}">{{ c.name }}</a>{% if c.is_mock %} <span class="muted">mock</span>{% endif %}</td>
+        <td><a class="cell-title" href="/channels/{{ c.id }}">{{ c.name }}</a>{% if c.handle %} <span class="muted">{{ c.handle }}</span>{% endif %}{% if c.is_mock %} <span class="muted">mock</span>{% endif %}
+          {% if c.angle %}<div class="muted channel-angle">{{ c.angle }}</div>{% endif %}</td>
         <td class="secondary">{{ niche_name(c.niche) }}</td>
         <td>{{ connection(c.connection) }}</td>
         <td class="num secondary">{{ c.youtube_channel_id or '—' }}</td>
