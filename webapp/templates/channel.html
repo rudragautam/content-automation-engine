@@ -80,7 +80,7 @@
       <thead><tr><th>Video</th><th class="r">Views</th><th class="r">Avg viewed</th><th class="r">Likes</th></tr></thead>
       <tbody>{% for v in top %}
         <tr><td><div class="cell-title clip" title="{{ v.title }}">{{ v.title }}</div><div class="cell-sub">{{ v.publish_at | when }}</div></td>
-        <td class="r num">{{ v.views | compact }}</td><td class="r num">{{ '%.0f' % v.avg_view_pct }}%</td><td class="r num">{{ v.likes | compact }}</td></tr>
+        <td class="r num">{{ v.views | compact }}</td><td class="r num">{{ ('%.0f%%' % v.avg_view_pct) if v.avg_view_pct is not none else '—' }}</td><td class="r num">{{ v.likes | compact }}</td></tr>
       {% endfor %}</tbody>
     </table></div>
     {% else %}<div class="empty">No published videos in this period.</div>{% endif %}

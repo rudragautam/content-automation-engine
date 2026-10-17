@@ -91,6 +91,17 @@ class TestPages(HubTestCase):
             with self.subTest(url=url):
                 self.assertEqual(self.client.get(url).status_code, 200)
 
+    def test_videos_synced_from_youtube_without_watch_stats_render(self):
+        with db.session() as conn:
+            conn.execute("INSERT INTO videos (channel_id, video_ref, title, status, publish_at, views, likes, youtube_video_id, created_at) "
+                         "VALUES (?, 'yt1', 'Synced video', 'published', ?, 500000, 9, 'yt1', 'now')",
+                         (self.focus_channel, timeutil.fmt(timeutil.now_local())))
+        for url in [f"/channels/{self.focus_channel}", "/analytics"]:
+            with self.subTest(url=url):
+                r = self.client.get(url)
+                self.assertEqual(r.status_code, 200)
+                self.assertIn("Synced video", r.text)
+
     def test_mock_banner_and_seed_runs_once(self):
         self.assertIn("Mock data.", self.client.get("/").text)
         with db.session() as conn:
