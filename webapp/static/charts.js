@@ -58,8 +58,8 @@ function tableView(container, headers, rows) {
 }
 
 export function lineChart(container, data, { height = 220, unit = "" } = {}) {
-  if (!data.length) { container.textContent = "No data for this period."; container.className += " empty"; return; }
   const values = data.map((d) => d.value);
+  if (!data.length || values.every((v) => !v)) { container.textContent = "Nothing yet for this period."; container.className += " empty"; return; }
   const fmt = (v) => compact(v) + unit;
   tableView(container, ["Date", "Value"], data.map((d) => [d.date, fmt(d.value)]));
 

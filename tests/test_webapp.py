@@ -30,6 +30,9 @@ class HubTestCase(unittest.TestCase):
         self._hub_dir = db.HUB_DIR
         db.HUB_DIR = self.tmp
         from webapp.app import app
+        demo = unittest.mock.patch.dict("os.environ", {"CONTENT_HUB_DEMO": "1"})
+        demo.start()
+        self.addCleanup(demo.stop)
         self.client = TestClient(app)
         self.client.__enter__()  # runs startup: schema + mock seed
         self.spec = get_spec("focus_habits")
@@ -50,6 +53,35 @@ class HubTestCase(unittest.TestCase):
     def own_videos(self):
         with db.session() as conn:
             return [dict(r) for r in conn.execute("SELECT * FROM videos WHERE is_mock = 0 ORDER BY id")]
+
+
+class TestFreshHub(unittest.TestCase):
+    """Without CONTENT_HUB_DEMO the hub starts empty and every page still works."""
+
+    def setUp(self):
+        self.tmp = tempfile.mkdtemp()
+        self._hub_dir = db.HUB_DIR
+        db.HUB_DIR = self.tmp
+        env = unittest.mock.patch.dict("os.environ", {"CONTENT_HUB_DEMO": ""})
+        env.start()
+        self.addCleanup(env.stop)
+        from webapp.app import app
+        self.client = TestClient(app)
+        self.client.__enter__()
+
+    def tearDown(self):
+        self.client.__exit__(None, None, None)
+        db.HUB_DIR = self._hub_dir
+        shutil.rmtree(self.tmp, ignore_errors=True)
+
+    def test_no_mock_data_and_pages_render_empty(self):
+        with db.session() as conn:
+            self.assertEqual(conn.execute("SELECT COUNT(*) FROM channels").fetchone()[0], 0)
+        for url in ["/", "/?days=90", "/schedule", "/content", "/content?niche=crime_files", "/audio", "/analytics", "/settings"]:
+            with self.subTest(url=url):
+                r = self.client.get(url)
+                self.assertEqual(r.status_code, 200)
+                self.assertNotIn("Mock data.", r.text)
 
 
 class TestPages(HubTestCase):

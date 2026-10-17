@@ -36,7 +36,7 @@
       <div class="alert {{ a.level }}"><span class="i">{{ '!' if a.level == 'critical' else '–' }}</span><span>{{ a.text }}</span><a href="{{ a.href }}">Open</a></div>
       {% endfor %}
       {% if low_queue %}
-      <div class="alert warning"><span class="i">–</span><span>{{ low_queue | length }} channel{{ '' if low_queue | length == 1 else 's' }} have under 3 days of videos queued:
+      <div class="alert warning"><span class="i">–</span><span>{{ low_queue | length }} channel{{ ' has' if low_queue | length == 1 else 's have' }} under 3 days of videos queued:
         {% for c in low_queue %}<a href="/channels/{{ c.id }}" style="margin:0;font-weight:500">{{ c.name }}</a> ({{ c.covered_days }}d){{ ', ' if not loop.last }}{% endfor %}.</span><a href="/content">Add</a></div>
       {% endif %}
       {% if not alerts and not low_queue %}<div class="empty">Nothing needs attention.</div>{% endif %}

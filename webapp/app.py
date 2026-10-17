@@ -26,7 +26,8 @@ MAX_AUDIO_BYTES = 60 * 1024 * 1024
 async def lifespan(_app):
     db.init()
     with db.session() as conn:
-        mock.seed(conn)
+        if os.environ.get("CONTENT_HUB_DEMO") == "1":  # demo channels only when asked for
+            mock.seed(conn)
         # A render interrupted by a restart would otherwise stay "rendering" forever.
         conn.execute("UPDATE videos SET status = 'failed', error = 'Render interrupted by a restart; render again.' WHERE status = 'rendering'")
         conn.execute("UPDATE videos SET status = 'rendered', error = 'Upload interrupted by a restart; upload again.' WHERE status = 'uploading'")
