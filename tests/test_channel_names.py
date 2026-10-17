@@ -85,6 +85,11 @@ class TestNamesInHub(HubTestCase):
         r = self.client.post(f"/channels/{self.leo}/setup/name", data={"name": "New"})
         self.assertIn("Change it in YouTube Studio", r.text)
 
+    def test_settings_lists_connected_channels_first(self):
+        page = self.client.get("/settings").text
+        table = page[page.index("<tbody>", page.index('id="channels"')):]
+        self.assertLess(table.index("Leo Ki Pathshala"), table.index("Crime Desk"))  # alphabetically it would be last
+
     def test_setup_window_offers_rename_or_copy(self):
         planned = self.client.get(f"/channels/{self.other}/setup").text
         self.assertIn('data-mode="rename"', planned)

@@ -675,7 +675,8 @@ def _settings_ctx(conn, request: Request):
     return {
         "client": youtube_sync.client_status(str(request.base_url)),
         "gemini": ai_drafts.status(conn),
-        "channels": [dict(r) for r in conn.execute("SELECT id, name, handle, angle, niche, connection, is_mock, youtube_channel_id, last_synced_at FROM channels ORDER BY is_mock, niche, name")],
+        "channels": [dict(r) for r in conn.execute("SELECT id, name, handle, angle, niche, connection, is_mock, youtube_channel_id, last_synced_at FROM channels "
+                     "ORDER BY is_mock, connection != 'connected', niche, name")],
         "mock_count": conn.execute("SELECT COUNT(*) FROM channels WHERE is_mock = 1").fetchone()[0],
         "niche_options": [(k, s.name) for k, s in NICHES.items()],
     }
