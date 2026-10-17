@@ -404,6 +404,15 @@ async def settings_client(request: Request, file: UploadFile = File(...)):
         return RedirectResponse(f"/settings?problem={_q(e)}", status_code=303)
 
 
+@app.post("/settings/client-keys")
+def settings_client_keys(request: Request, client_id: str = Form(""), client_secret: str = Form("")):
+    try:
+        youtube_sync.save_client_keys(client_id, client_secret, str(request.base_url))
+        return RedirectResponse("/settings?notice=OAuth+client+saved.", status_code=303)
+    except ActionError as e:
+        return RedirectResponse(f"/settings?problem={_q(e)}", status_code=303)
+
+
 @app.post("/settings/channels")
 def settings_add_channel(name: str = Form(""), niche: str = Form(""), slots: str = Form("")):
     try:

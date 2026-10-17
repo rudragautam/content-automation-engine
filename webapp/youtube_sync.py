@@ -6,6 +6,7 @@ Secrets live under <hub dir>/secrets (inside output/, which git ignores):
 """
 
 import datetime as dt
+import json
 import logging
 import os
 import secrets
@@ -75,6 +76,22 @@ def save_client_file(data: bytes) -> None:
     os.makedirs(secrets_dir(), exist_ok=True)
     with open(client_path(), "w", encoding="utf-8") as f:
         f.write(text)
+
+
+def save_client_keys(client_id: str, client_secret: str, base_url: str) -> None:
+    """Build the client file from a pasted Client ID and secret (Google Cloud no longer offers the
+    JSON download after the client is created)."""
+    client_id, client_secret = client_id.strip(), client_secret.strip()
+    if not client_id.endswith(".apps.googleusercontent.com"):
+        raise ActionError("That isn't a Client ID; it ends in .apps.googleusercontent.com. Copy it from Google Cloud → Credentials → your OAuth client.")
+    if not client_secret or " " in client_secret:
+        raise ActionError("Paste the Client secret from the same OAuth client.")
+    config = {"web": {
+        "client_id": client_id, "client_secret": client_secret,
+        "auth_uri": "https://accounts.google.com/o/oauth2/auth", "token_uri": "https://oauth2.googleapis.com/token",
+        "redirect_uris": [redirect_uri(base_url)],
+    }}
+    save_client_file(json.dumps(config, indent=2).encode("utf-8"))
 
 
 # ---------- channels ----------

@@ -40,6 +40,17 @@ class TestYouTubeConnection(HubTestCase):
         self.save_client()
         self.assertIn("Client file saved", self.client.get("/settings").text)
 
+    def test_client_can_be_pasted_as_id_and_secret(self):
+        self.assertIn("isn&#39;t a Client ID", self.client.post("/settings/client-keys", data={"client_id": "abc", "client_secret": "s"}).text)
+        self.assertIn("Paste the Client secret", self.client.post("/settings/client-keys", data={"client_id": "1-x.apps.googleusercontent.com", "client_secret": ""}).text)
+        page = self.client.post("/settings/client-keys", data={"client_id": " 1-x.apps.googleusercontent.com ", "client_secret": "GOCSPX-abc "}).text
+        self.assertIn("Client file saved", page)
+        self.assertNotIn("GOCSPX-abc", page)
+        status = youtube_sync.client_status("http://testserver/")
+        self.assertEqual((status["kind"], status["redirect_ok"]), ("web", True))
+        location = self.client.get(f"/oauth/start?channel={self.real_channel()}", follow_redirects=False).headers["location"]
+        self.assertIn("client_id=1-x.apps.googleusercontent.com", location)
+
     def test_add_channel_validates_slots(self):
         self.assertIn("Not a time", self.client.post("/settings/channels", data={"name": "New", "niche": "focus_habits", "slots": "7pm"}).text)
         r = self.client.post("/settings/channels", data={"name": "New", "niche": "focus_habits", "slots": "07:00"}, follow_redirects=False)

@@ -29,6 +29,19 @@
       </label>
       <button class="btn primary" type="submit">{{ 'Replace' if client.present else 'Save' }} client file</button>
     </form>
+    <details style="margin-top:12px"{% if not client.present %} open{% endif %}>
+      <summary class="muted" style="cursor:pointer;font-size:12.5px">No JSON file? Paste the Client ID and Client secret instead</summary>
+      <form method="post" action="/settings/client-keys" class="form-row" style="margin-top:8px">
+        <label class="field" style="flex:2;min-width:240px">Client ID
+          <input type="text" name="client_id" required autocomplete="off" placeholder="1234…apps.googleusercontent.com">
+        </label>
+        <label class="field" style="flex:1;min-width:180px">Client secret
+          <input type="password" name="client_secret" required autocomplete="off" placeholder="GOCSPX-…">
+        </label>
+        <button class="btn primary" type="submit">Save</button>
+      </form>
+      <p class="muted" style="margin-top:6px;font-size:12.5px">The client must be a <strong>Web application</strong> with <code>{{ client.redirect_uri }}</code> under Authorized redirect URIs. Channels already connected keep working after you switch clients.</p>
+    </details>
     <p class="muted" style="margin-top:8px;font-size:12.5px">Stored only on this PC, in <code>output/hub/secrets/</code>, which git ignores.</p>
   </section>
 
