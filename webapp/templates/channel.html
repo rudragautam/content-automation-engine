@@ -28,6 +28,7 @@
 {% else %}
 <div class="form-row" style="margin:-6px 0 14px">
   <span class="secondary">YouTube channel <code>{{ channel.youtube_channel_id }}</code> · last sync {{ channel.last_synced_at | when }}</span>
+  <a class="btn small primary" href="/channels/{{ channel.id }}/setup" target="setup-{{ channel.id }}" data-setup-window>Set up channel ↗</a>
   <button class="btn small" data-action="sync" data-channel="{{ channel.id }}" type="button">Sync from YouTube</button>
   <button class="btn small danger" data-action="disconnect" data-channel="{{ channel.id }}" type="button">Disconnect</button>
 </div>

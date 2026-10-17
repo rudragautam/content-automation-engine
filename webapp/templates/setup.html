@@ -1,0 +1,242 @@
+{% extends "base.html" %}
+{% block title %}Set up {{ channel.name }}{% endblock %}
+{% block content %}
+<header class="setup-head">
+  <div class="setup-id">
+    {% if live and live.thumbnail %}<img class="setup-avatar" src="{{ live.thumbnail }}" alt="" width="56" height="56" referrerpolicy="no-referrer">{% else %}<span class="setup-avatar placeholder" aria-hidden="true">{{ channel.name[:1] }}</span>{% endif %}
+    <div>
+      <div class="muted" style="font-size:12.5px">Channel setup</div>
+      <h1>{{ live.title if live else channel.name }}</h1>
+      <div class="sub">{% if live and live.handle %}{{ live.handle }} · {% endif %}{{ niche_name(channel.niche) }}</div>
+    </div>
+  </div>
+  <div class="actions">
+    {% if live %}<a class="btn small" href="https://www.youtube.com/channel/{{ live.id }}" target="_blank" rel="noopener">View on YouTube ↗</a>{% endif %}
+    <a class="btn small" href="/channels/{{ channel.id }}" id="back-to-hub">Channel page</a>
+    <button class="btn small" type="button" id="close-window">Close</button>
+  </div>
+</header>
+
+{% if notice %}<div class="notice ok" role="status">{{ notice }}</div>{% endif %}
+{% if problem %}<div class="notice bad" role="alert">{{ problem }}</div>{% endif %}
+
+{% if not live %}
+<section class="card" style="margin-bottom:16px">
+  {% if channel.is_mock %}
+  <p>This is a mock channel; there is nothing on YouTube to set up.</p>
+  {% elif load_error %}
+  <div class="notice bad">Couldn't read the channel from YouTube: {{ load_error }}</div>
+  <a class="btn primary" href="/channels/{{ channel.id }}">Open the channel page to reconnect</a>
+  {% else %}
+  <p class="secondary">Create this channel on YouTube and connect it to set its description, banner, trailer and playlists from here. Upload defaults below can be set now.</p>
+  <a class="btn primary" href="/settings#channels">Connect a YouTube channel</a>
+  {% endif %}
+</section>
+{% endif %}
+
+<div class="setup-layout">
+  <nav class="setup-nav" aria-label="Setup sections">
+    {% if live %}
+    <a href="#about">About</a>
+    <a href="#branding">Banner &amp; watermark</a>
+    <a href="#trailer">Channel trailer</a>
+    <a href="#playlists">Playlists</a>
+    {% endif %}
+    <a href="#defaults">Upload defaults</a>
+    {% if live %}<a href="#studio">In YouTube Studio</a>{% endif %}
+    <p class="muted">Each section saves on its own. Writes to YouTube use about 50 of the 10,000 daily API units.</p>
+  </nav>
+
+  <div class="setup-main">
+  {% if live %}
+    <section class="card setup-section" id="about">
+      <div class="card-head"><h2>About</h2><span class="muted">Shown on the channel's About tab and in search</span></div>
+      <form method="post" action="/channels/{{ channel.id }}/setup/about" class="setup-form">
+        <label class="field">Description
+          <textarea name="description" id="about-description" rows="9" maxlength="{{ about_limit }}">{{ live.description }}</textarea>
+          <span class="hint"><span id="about-count">{{ live.description | length }}</span> / {{ about_limit }} characters</span>
+        </label>
+        <label class="field">Keywords
+          <textarea name="keywords" id="about-keywords" rows="3" placeholder="e.g. study tips, focus, productivity">{{ live.keywords | join(', ') }}</textarea>
+          <span class="hint">Separate with commas. Phrases of several words are fine.</span>
+        </label>
+        <div class="form-row">
+          <label class="field">Country
+            <select name="country"><option value="">Not set</option>{% for code, name in countries.items() %}<option value="{{ code }}" {{ 'selected' if live.country == code }}>{{ name }}</option>{% endfor %}</select>
+          </label>
+          <label class="field">Channel language
+            <select name="language"><option value="">Not set</option>{% for code, name in languages.items() %}<option value="{{ code }}" {{ 'selected' if live.language == code }}>{{ name }}</option>{% endfor %}</select>
+          </label>
+        </div>
+        <div class="form-actions">
+          <button class="btn" type="button" id="write-about" data-channel="{{ channel.id }}">✨ Write with Gemini</button>
+          <span class="muted" id="write-about-status" role="status"></span>
+          <button class="btn primary" type="submit">Save to YouTube</button>
+        </div>
+      </form>
+    </section>
+
+    <section class="card setup-section" id="branding">
+      <div class="card-head"><h2>Banner &amp; watermark</h2></div>
+      <h3>Banner</h3>
+      {% if live.banner %}<img class="banner-preview" src="{{ live.banner }}=w1060" alt="Current channel banner" referrerpolicy="no-referrer">{% else %}<div class="empty banner-preview">No banner yet</div>{% endif %}
+      <form method="post" action="/channels/{{ channel.id }}/setup/banner" enctype="multipart/form-data" class="form-row" style="margin-top:10px">
+        <label class="field" style="flex:1">Banner image (JPG or PNG)
+          <input type="file" name="file" accept="image/jpeg,image/png" required>
+        </label>
+        <button class="btn primary" type="submit">Upload banner</button>
+      </form>
+      <p class="hint">2560×1440 works best (at least 2048×1152, 16:9, up to 6 MB). Keep text and logos in the centre 1546×423; that part shows on every device.</p>
+
+      <h3 style="margin-top:20px">Watermark</h3>
+      <p class="secondary" style="margin-bottom:8px">A small image, usually a subscribe button, shown in the corner of every video on the channel. Viewers who click it can subscribe.</p>
+      <form method="post" action="/channels/{{ channel.id }}/setup/watermark" enctype="multipart/form-data" class="form-row">
+        <label class="field" style="flex:1">Image (square PNG, JPG or GIF, at least 150×150, up to 1 MB)
+          <input type="file" name="file" accept="image/png,image/jpeg,image/gif" required>
+        </label>
+        <label class="field">Show it
+          <select name="timing"><option value="end">For the last 15 seconds</option><option value="start">For the whole video</option></select>
+        </label>
+        <button class="btn primary" type="submit">Set watermark</button>
+      </form>
+      <form method="post" action="/channels/{{ channel.id }}/setup/watermark/remove" style="margin-top:8px" onsubmit="return confirm('Remove the watermark from all of this channel\'s videos?')">
+        <button class="btn small danger" type="submit">Remove watermark</button>
+        <span class="hint">YouTube doesn't let apps read back the current watermark, so it isn't previewed here.</span>
+      </form>
+    </section>
+
+    <section class="card setup-section" id="trailer">
+      <div class="card-head"><h2>Channel trailer</h2><span class="muted">Plays for visitors who haven't subscribed</span></div>
+      {% if videos %}
+      <form method="post" action="/channels/{{ channel.id }}/setup/trailer" class="form-row">
+        <label class="field" style="flex:1">Trailer video
+          <select name="video_id">
+            <option value="">No trailer</option>
+            {% for v in videos %}<option value="{{ v.id }}" {{ 'selected' if live.trailer == v.id }}>{{ v.title }}</option>{% endfor %}
+          </select>
+        </label>
+        <button class="btn primary" type="submit">Save to YouTube</button>
+      </form>
+      {% else %}
+      <div class="empty">No public videos yet. Once one is public, you can make it the trailer here.</div>
+      {% endif %}
+    </section>
+
+    <section class="card setup-section" id="playlists">
+      <div class="card-head"><h2>Playlists</h2><span class="muted">{{ playlists | length }}</span></div>
+      {% if playlists %}
+      <div class="table-wrap"><table>
+        <thead><tr><th>Playlist</th><th>Visibility</th><th class="r">Videos</th><th></th></tr></thead>
+        <tbody>{% for p in playlists %}
+          <tr><td><a class="cell-title" href="https://www.youtube.com/playlist?list={{ p.id }}" target="_blank" rel="noopener">{{ p.title }}</a></td>
+            <td class="secondary">{{ privacy.get(p.privacy, p.privacy) }}</td><td class="r num">{{ p.count }}</td>
+            <td class="r">{% if prefs.playlist_id == p.id %}<span class="chip good"><span class="i">✓</span>New uploads go here</span>{% endif %}</td></tr>
+        {% endfor %}</tbody>
+      </table></div>
+      <form method="post" action="/channels/{{ channel.id }}/setup/upload-playlist" class="form-row" style="margin-top:12px">
+        <label class="field" style="flex:1">Add every new upload to
+          <select name="playlist_id">
+            <option value="">No playlist</option>
+            {% for p in playlists %}<option value="{{ p.id }}" {{ 'selected' if prefs.playlist_id == p.id }}>{{ p.title }}</option>{% endfor %}
+          </select>
+        </label>
+        <button class="btn" type="submit">Save</button>
+      </form>
+      {% else %}<div class="empty">No playlists yet.</div>{% endif %}
+
+      <h3 style="margin-top:20px">New playlist</h3>
+      <form method="post" action="/channels/{{ channel.id }}/setup/playlist" class="setup-form">
+        <div class="form-row">
+          <label class="field" style="flex:2;min-width:220px">Title
+            <input type="text" name="title" required maxlength="150" placeholder="e.g. Daily Focus Habits">
+          </label>
+          <label class="field">Visibility
+            <select name="privacy">{% for k, v in privacy.items() %}<option value="{{ k }}">{{ v }}</option>{% endfor %}</select>
+          </label>
+        </div>
+        <label class="field">Description (optional)
+          <textarea name="description" rows="2" maxlength="5000"></textarea>
+        </label>
+        <div class="form-actions">
+          <label class="check"><input type="checkbox" name="use_for_uploads" value="yes" {{ 'checked' if not prefs.playlist_id }}> Add every new upload to it</label>
+          <button class="btn primary" type="submit">Create on YouTube</button>
+        </div>
+      </form>
+    </section>
+  {% endif %}
+
+    <section class="card setup-section" id="defaults">
+      <div class="card-head"><h2>Upload defaults</h2><span class="muted">Saved in the hub, applied to every upload</span></div>
+      {% if live and live.made_for_kids %}<div class="notice">YouTube has this whole channel set as <strong>made for kids</strong>, so every video on it is treated that way, whatever you choose below. Change it in <a href="https://studio.youtube.com/channel/{{ live.id }}/editing/defaults" target="_blank" rel="noopener">Studio → Settings → Channel → Advanced</a>.</div>{% endif %}
+      <form method="post" action="/channels/{{ channel.id }}/setup/defaults" class="setup-form">
+        <div class="form-row">
+          <label class="field">Category
+            <select name="category_id">{% for k, v in categories.items() %}<option value="{{ k }}" {{ 'selected' if prefs.category_id == k }}>{{ v }}</option>{% endfor %}</select>
+          </label>
+          <label class="field">Video language
+            <select name="language">{% for k, v in languages.items() %}<option value="{{ k }}" {{ 'selected' if prefs.language == k }}>{{ v }}</option>{% endfor %}</select>
+          </label>
+        </div>
+        <fieldset class="field">
+          <legend>Made for kids?</legend>
+          <label class="check"><input type="radio" name="made_for_kids" value="no" {{ 'checked' if not prefs.made_for_kids }}> No</label>
+          <label class="check"><input type="radio" name="made_for_kids" value="yes" {{ 'checked' if prefs.made_for_kids }}> Yes, made for children</label>
+          <span class="hint">Required by US law (COPPA). "Yes" turns off comments and personalised ads on the video.</span>
+        </fieldset>
+        <fieldset class="field">
+          <legend>Altered or synthetic content</legend>
+          <label class="check"><input type="radio" name="synthetic_media" value="yes" {{ 'checked' if prefs.synthetic_media }}> Declare it (recommended: scripts are AI-written)</label>
+          <label class="check"><input type="radio" name="synthetic_media" value="no" {{ 'checked' if not prefs.synthetic_media }}> Don't declare</label>
+        </fieldset>
+        <label class="field">Tags added to every video
+          <input type="text" name="default_tags" value="{{ prefs.default_tags | join(', ') }}" placeholder="e.g. {{ channel.name | lower }}, shorts">
+          <span class="hint">Comma separated; added after each video's own tags.</span>
+        </label>
+        <label class="field">Text added to the end of every description
+          <textarea name="description_footer" rows="4" maxlength="1000" placeholder="e.g. Subscribe for a new video every day.&#10;#shorts">{{ prefs.description_footer }}</textarea>
+        </label>
+        <div class="form-actions"><span></span><button class="btn primary" type="submit">Save defaults</button></div>
+      </form>
+    </section>
+
+  {% if live %}
+    <section class="card setup-section" id="studio">
+      <div class="card-head"><h2>In YouTube Studio</h2><span class="muted">YouTube doesn't let apps change these</span></div>
+      <ul class="studio-links">
+        <li><span>Channel name</span><a href="https://studio.youtube.com/channel/{{ live.id }}/editing/profile" target="_blank" rel="noopener">Change in Studio ↗</a></li>
+        <li><span>@handle</span><a href="https://studio.youtube.com/channel/{{ live.id }}/editing/profile" target="_blank" rel="noopener">Change in Studio ↗</a></li>
+        <li><span>Profile picture</span><a href="https://studio.youtube.com/channel/{{ live.id }}/editing/profile" target="_blank" rel="noopener">Change in Studio ↗</a></li>
+        <li><span>Monetisation &amp; verification</span><a href="https://studio.youtube.com/channel/{{ live.id }}/monetization" target="_blank" rel="noopener">Open in Studio ↗</a></li>
+      </ul>
+    </section>
+  {% endif %}
+  </div>
+</div>
+
+<script>
+(() => {
+  const close = document.getElementById("close-window");
+  // Opened as a separate window: Close shuts it. Opened as a normal tab: go back to the channel.
+  close.addEventListener("click", () => { if (window.opener) window.close(); else location.href = document.getElementById("back-to-hub").href; });
+  if (window.opener) { try { window.opener.focus; } catch (e) {} }
+
+  const desc = document.getElementById("about-description"), count = document.getElementById("about-count");
+  desc?.addEventListener("input", () => { count.textContent = desc.value.length; });
+
+  const write = document.getElementById("write-about");
+  write?.addEventListener("click", async () => {
+    const status = document.getElementById("write-about-status");
+    write.disabled = true; status.textContent = "Gemini is writing…";
+    try {
+      const res = await fetch(`/api/channels/${write.dataset.channel}/setup/write-about`, { method: "POST" });
+      const data = await res.json();
+      if (!res.ok) throw new Error(data.error || "Gemini couldn't write it.");
+      desc.value = data.description; count.textContent = desc.value.length;
+      document.getElementById("about-keywords").value = data.keywords.join(", ");
+      status.textContent = "Draft filled in. Read it, edit, then Save to YouTube.";
+    } catch (e) { status.textContent = e.message; }
+    write.disabled = false;
+  });
+})();
+</script>
+{% endblock %}

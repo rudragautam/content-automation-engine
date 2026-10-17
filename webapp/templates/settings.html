@@ -133,7 +133,7 @@
         <td>{{ connection(c.connection) }}</td>
         <td class="num secondary">{{ c.youtube_channel_id or '—' }}</td>
         <td class="num">{{ c.last_synced_at | when }}</td>
-        <td class="r">{% if not c.is_mock %}<a class="btn small" href="/channels/{{ c.id }}">Open</a>{% endif %}</td>
+        <td class="r nowrap">{% if not c.is_mock %}{% if c.connection == 'connected' %}<a class="btn small" href="/channels/{{ c.id }}/setup" target="setup-{{ c.id }}" data-setup-window>Set up ↗</a> {% endif %}<a class="btn small" href="/channels/{{ c.id }}">Open</a>{% endif %}</td>
       </tr>
     {% endfor %}</tbody>
   </table></div>

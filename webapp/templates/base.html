@@ -7,7 +7,8 @@
 <link rel="stylesheet" href="/static/app.css">
 </head>
 <body>
-<div class="shell">
+<div class="shell{{ ' bare' if bare }}">
+  {% if not bare %}
   <aside class="sidebar">
     <div class="brand"><span class="brand-mark">▶</span>Content Hub</div>
     <nav class="nav">
@@ -24,6 +25,7 @@
       <span class="muted" style="font-size:12px">Times in Asia/Kolkata</span>
     </div>
   </aside>
+  {% endif %}
   <main>
     {% if mock_count_global %}<div class="mock-banner"><strong>Mock data.</strong> {{ mock_count_global }} simulated channels are loaded alongside your real ones. Remove them in <a href="/settings">Settings</a> once your channels are connected.</div>{% endif %}
     {% block content %}{% endblock %}

@@ -145,3 +145,13 @@ if (draftBox) {
 }
 
 mountAll();
+
+// Channel setup opens in its own window, reused if it's already open for that channel.
+document.addEventListener("click", (e) => {
+  const link = e.target.closest("[data-setup-window]");
+  if (!link || e.ctrlKey || e.metaKey || e.shiftKey) return;
+  e.preventDefault();
+  const w = Math.min(1200, screen.availWidth - 40), h = Math.min(920, screen.availHeight - 40);
+  const win = window.open(link.href, link.target, `width=${w},height=${h},left=${(screen.availWidth - w) / 2},top=20`);
+  if (win) win.focus(); else location.href = link.href;  // popup blocked: open here instead
+});

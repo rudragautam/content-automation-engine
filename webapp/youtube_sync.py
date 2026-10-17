@@ -245,12 +245,18 @@ def upload_now(video_id: int, services=None) -> None:
         try:
             v = conn.execute("SELECT v.*, c.niche, c.timezone FROM videos v JOIN channels c ON c.id = v.channel_id WHERE v.id = ?", (video_id,)).fetchone()
             youtube, _ = services or _services(conn, v["channel_id"])
-            spec = NICHES.get(v["niche"])
+            from webapp import channel_setup
+
+            prefs = channel_setup.defaults(conn, v["channel_id"])
+            footer = prefs["description_footer"]
+            description = "\n\n".join(part for part in (v["description"], footer) if part)
+            own_tags = [t.strip() for t in v["tags"].split(",") if t.strip()]
+            tags = own_tags + [t for t in prefs["default_tags"] if t.lower() not in {o.lower() for o in own_tags}]
             body = yt.upload_body(
-                v["title"], v["description"], [t for t in v["tags"].split(",") if t.strip()],
+                v["title"], description, tags,
                 yt.to_utc_rfc3339(v["publish_at"], v["timezone"]) if v["publish_at"] else None,
-                category_id=CATEGORY.get(v["niche"], "27"),
-                language="hi" if spec and spec.language.startswith("Hindi") else "en",
+                category_id=prefs["category_id"], language=prefs["language"],
+                made_for_kids=prefs["made_for_kids"], synthetic_media=prefs["synthetic_media"],
             )
 
             def progress(p):
@@ -260,6 +266,13 @@ def upload_now(video_id: int, services=None) -> None:
             yt_id = yt.upload_video(youtube, v["video_path"], body, progress)
             _add_quota(conn, yt.UPLOAD_COST)
             conn.execute("UPDATE videos SET status = 'scheduled', youtube_video_id = ?, upload_progress = 100 WHERE id = ?", (yt_id, video_id))
+            conn.commit()
+            if prefs["playlist_id"]:
+                try:  # the video is on YouTube either way; a playlist hiccup shouldn't mark it failed
+                    yt.add_to_playlist(youtube, prefs["playlist_id"], yt_id)
+                    _add_quota(conn, yt.WRITE_COST)
+                except yt.YouTubeError as e:
+                    conn.execute("UPDATE videos SET error = ? WHERE id = ?", (f"Uploaded, but not added to the playlist: {e}"[:500], video_id))
         except yt.YouTubeError as e:
             conn.execute("UPDATE videos SET status = 'rendered', error = ? WHERE id = ?", (f"Upload failed: {e}"[:500], video_id))
         except Exception as e:

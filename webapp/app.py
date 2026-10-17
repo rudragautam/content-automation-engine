@@ -14,8 +14,8 @@ from fastapi.templating import Jinja2Templates
 from markupsafe import Markup
 
 from content_templates import NICHES, workbook_bytes
-from publishing.youtube import YouTubeError
-from webapp import ai_drafts, analytics, db, mock, queue, scope, timeutil, youtube_sync
+from publishing.youtube import ABOUT_LIMIT as YT_ABOUT_LIMIT, YouTubeError
+from webapp import ai_drafts, analytics, channel_setup, db, mock, queue, scope, timeutil, youtube_sync
 from webapp.paging import paginate
 from webapp.queue import ActionError
 
@@ -135,6 +135,103 @@ def channel_page(request: Request, channel_id: int, days: int = 28, notice: str 
             can_render=queue.can_render(channel["niche"]),
             notice=notice, problem=problem, client_ready=os.path.exists(youtube_sync.client_path()),
         )
+
+
+# ---------- channel setup (opens in its own window) ----------
+
+SETUP_SECTIONS = ("about", "branding", "trailer", "playlists", "defaults")
+
+
+def _setup_back(channel_id: int, section: str, notice: str = "", problem: str = ""):
+    query = f"notice={_q(notice)}" if notice else f"problem={_q(problem)}"
+    return RedirectResponse(f"/channels/{channel_id}/setup?{query}#{section}", status_code=303)
+
+
+@app.get("/channels/{channel_id}/setup")
+def setup_page(request: Request, channel_id: int, notice: str = "", problem: str = ""):
+    with db.session() as conn:
+        channel = conn.execute("SELECT * FROM channels WHERE id = ?", (channel_id,)).fetchone()
+        if not channel:
+            return Response("Channel not found", status_code=404)
+        ctx = {"live": None, "playlists": [], "videos": [], "load_error": ""}
+        if not channel["is_mock"] and channel["connection"] == "connected":
+            try:
+                ctx.update(channel_setup.load(conn, channel_id))
+            except (ActionError, YouTubeError) as e:
+                ctx["load_error"] = str(e)
+        return page(
+            request, "setup.html", bare=True, active_override="dashboard", channel=dict(channel), notice=notice, problem=problem,
+            prefs=channel_setup.defaults(conn, channel_id), categories=channel_setup.CATEGORIES, languages=channel_setup.LANGUAGES,
+            countries=channel_setup.COUNTRIES, privacy=channel_setup.PRIVACY, about_limit=YT_ABOUT_LIMIT, **ctx,
+        )
+
+
+@app.post("/channels/{channel_id}/setup/about")
+def setup_about(channel_id: int, description: str = Form(""), keywords: str = Form(""), country: str = Form(""), language: str = Form("")):
+    return _setup_action(channel_id, "about", "About section saved to YouTube.",
+                         lambda conn: channel_setup.save_about(conn, channel_id, {"description": description, "keywords": keywords, "country": country, "language": language}))
+
+
+@app.post("/channels/{channel_id}/setup/banner")
+async def setup_banner(channel_id: int, file: UploadFile = File(...)):
+    data = await file.read(channel_setup.BANNER_MAX_BYTES + 1)
+    return _setup_action(channel_id, "branding", "Banner uploaded. YouTube can take a few minutes to show it everywhere.",
+                         lambda conn: channel_setup.save_banner(conn, channel_id, data))
+
+
+@app.post("/channels/{channel_id}/setup/watermark")
+async def setup_watermark(channel_id: int, file: UploadFile = File(...), timing: str = Form("end")):
+    data = await file.read(channel_setup.WATERMARK_MAX_BYTES + 1)
+    return _setup_action(channel_id, "branding", "Watermark set on all of this channel's videos.",
+                         lambda conn: channel_setup.save_watermark(conn, channel_id, data, timing))
+
+
+@app.post("/channels/{channel_id}/setup/watermark/remove")
+def setup_watermark_remove(channel_id: int):
+    return _setup_action(channel_id, "branding", "Watermark removed.", lambda conn: channel_setup.remove_watermark(conn, channel_id))
+
+
+@app.post("/channels/{channel_id}/setup/trailer")
+def setup_trailer(channel_id: int, video_id: str = Form("")):
+    return _setup_action(channel_id, "trailer", "Channel trailer saved." if video_id else "Channel trailer removed.",
+                         lambda conn: channel_setup.save_trailer(conn, channel_id, video_id))
+
+
+@app.post("/channels/{channel_id}/setup/playlist")
+def setup_playlist(channel_id: int, title: str = Form(""), description: str = Form(""), privacy: str = Form("public"), use_for_uploads: str = Form("")):
+    return _setup_action(channel_id, "playlists", f"Playlist “{title.strip()}” created on YouTube.",
+                         lambda conn: channel_setup.create_playlist(conn, channel_id, title, description, privacy, use_for_uploads == "yes"))
+
+
+@app.post("/channels/{channel_id}/setup/upload-playlist")
+def setup_upload_playlist(channel_id: int, playlist_id: str = Form("")):
+    return _setup_action(channel_id, "playlists", "New uploads will be added to that playlist." if playlist_id else "New uploads won't be added to a playlist.",
+                         lambda conn: channel_setup.set_upload_playlist(conn, channel_id, playlist_id))
+
+
+@app.post("/channels/{channel_id}/setup/defaults")
+async def setup_defaults(request: Request, channel_id: int):
+    form = {k: str(v) for k, v in (await request.form()).items()}
+    return _setup_action(channel_id, "defaults", "Upload defaults saved. They apply to every video uploaded from now on.",
+                         lambda conn: channel_setup.save_defaults(conn, channel_id, form))
+
+
+@app.post("/api/channels/{channel_id}/setup/write-about")
+def setup_write_about(channel_id: int):
+    try:
+        with db.session() as conn:
+            return channel_setup.write_about(conn, channel_id)
+    except ActionError as e:
+        return error(e)
+
+
+def _setup_action(channel_id: int, section: str, notice: str, action):
+    try:
+        with db.session() as conn:
+            action(conn)
+        return _setup_back(channel_id, section, notice=notice)
+    except (ActionError, YouTubeError) as e:
+        return _setup_back(channel_id, section, problem=str(e))
 
 
 @app.get("/schedule")

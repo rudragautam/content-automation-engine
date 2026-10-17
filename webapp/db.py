@@ -109,7 +109,7 @@ CREATE TABLE IF NOT EXISTS settings (
 # Columns added after the first release; init() adds any that an older database lacks.
 MIGRATIONS = {
     "videos": [("youtube_video_id", "TEXT"), ("upload_progress", "REAL")],
-    "channels": [("last_synced_at", "TEXT")],
+    "channels": [("last_synced_at", "TEXT"), ("setup_json", "TEXT")],
 }
 
 

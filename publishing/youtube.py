@@ -145,6 +145,116 @@ def my_channel(youtube) -> Dict[str, Any]:
     }
 
 
+# ---------- channel setup ----------
+# Name, @handle and profile picture can only be changed in YouTube Studio; everything
+# below is what the Data API allows. Each write costs 50 quota units, each read 1.
+
+ABOUT_LIMIT = 1000        # channel description
+KEYWORDS_LIMIT = 500      # channel keywords, as YouTube stores them (space separated, quoted phrases)
+WRITE_COST = 50
+
+
+def format_keywords(words: List[str]) -> str:
+    """['ai', 'deep learning'] -> 'ai "deep learning"' (YouTube's channel keyword format)."""
+    out = []
+    for w in (re.sub(r'["<>]', "", w).strip() for w in words):
+        if w:
+            out.append(f'"{w}"' if " " in w else w)
+    return " ".join(out)
+
+
+def parse_keywords(text: str) -> List[str]:
+    return [a or b for a, b in re.findall(r'"([^"]+)"|(\S+)', text or "")]
+
+
+def channel_setup(youtube) -> Dict[str, Any]:
+    """Everything the setup window shows, read in one call."""
+    res = _call(youtube.channels().list(part="snippet,brandingSettings,contentDetails,status", mine=True))
+    items = res.get("items") or []
+    if not items:
+        raise YouTubeError("This sign-in has no YouTube channel.")
+    ch = items[0]
+    branding = ch.get("brandingSettings", {})
+    info = branding.get("channel", {})
+    thumbs = ch.get("snippet", {}).get("thumbnails", {})
+    return {
+        "id": ch["id"],
+        "title": ch["snippet"]["title"],
+        "handle": ch["snippet"].get("customUrl", ""),
+        "thumbnail": (thumbs.get("medium") or thumbs.get("default") or {}).get("url", ""),
+        "description": info.get("description", ""),
+        "keywords": parse_keywords(info.get("keywords", "")),
+        "country": info.get("country", ""),
+        "language": info.get("defaultLanguage", ""),
+        "trailer": info.get("unsubscribedTrailer", ""),
+        "banner": branding.get("image", {}).get("bannerExternalUrl", ""),
+        "uploads_playlist": ch.get("contentDetails", {}).get("relatedPlaylists", {}).get("uploads"),
+        "made_for_kids": ch.get("status", {}).get("madeForKids"),
+        "branding": branding,
+    }
+
+
+def update_branding(youtube, channel_id: str, branding: Dict[str, Any], channel: Dict[str, Any] = None, image: Dict[str, Any] = None) -> None:
+    """channels.update replaces the whole brandingSettings part, so start from what is
+    there now and change only the given fields. The title is never sent: YouTube only
+    lets Studio change it."""
+    merged = json.loads(json.dumps(branding or {}))
+    info = {k: v for k, v in merged.get("channel", {}).items() if k != "title"}
+    info.update({k: v for k, v in (channel or {}).items() if v is not None})
+    merged["channel"] = {k: v for k, v in info.items() if v != ""}
+    if image:
+        merged.setdefault("image", {}).update(image)
+    _call(youtube.channels().update(part="brandingSettings", body={"id": channel_id, "brandingSettings": merged}))
+
+
+def upload_banner(youtube, path: str, mimetype: str) -> str:
+    """Upload a banner image; returns the URL to set as bannerExternalUrl."""
+    from googleapiclient.http import MediaFileUpload
+
+    res = _call(youtube.channelBanners().insert(media_body=MediaFileUpload(path, mimetype=mimetype, resumable=False)))
+    if not res.get("url"):
+        raise YouTubeError("YouTube didn't accept the banner image.")
+    return res["url"]
+
+
+def set_watermark(youtube, channel_id: str, path: str, mimetype: str, timing: str = "offsetFromEnd", offset_ms: int = 15000) -> None:
+    """The small branding image (usually a subscribe button) shown on every video of the channel."""
+    from googleapiclient.http import MediaFileUpload
+
+    body = {"timing": {"type": timing, "offsetMs": int(offset_ms)}, "position": {"type": "corner", "cornerPosition": "topRight"}}
+    if timing == "offsetFromStart" and offset_ms == 0:
+        body["timing"]["durationMs"] = 0  # 0 = for the entire video
+    _call(youtube.watermarks().set(channelId=channel_id, body=body, media_body=MediaFileUpload(path, mimetype=mimetype, resumable=False)))
+
+
+def unset_watermark(youtube, channel_id: str) -> None:
+    _call(youtube.watermarks().unset(channelId=channel_id))
+
+
+def list_playlists(youtube) -> List[Dict[str, Any]]:
+    res = _call(youtube.playlists().list(part="snippet,status,contentDetails", mine=True, maxResults=50))
+    return [{
+        "id": p["id"],
+        "title": p["snippet"]["title"],
+        "description": p["snippet"].get("description", ""),
+        "privacy": p.get("status", {}).get("privacyStatus", ""),
+        "count": p.get("contentDetails", {}).get("itemCount", 0),
+    } for p in res.get("items") or []]
+
+
+def create_playlist(youtube, title: str, description: str = "", privacy: str = "public") -> str:
+    title = _clean(title)
+    if not title:
+        raise YouTubeError("The playlist needs a title.")
+    body = {"snippet": {"title": title[:150], "description": _clean(description)[:5000]}, "status": {"privacyStatus": privacy}}
+    return _call(youtube.playlists().insert(part="snippet,status", body=body))["id"]
+
+
+def add_to_playlist(youtube, playlist_id: str, video_id: str) -> None:
+    body = {"snippet": {"playlistId": playlist_id, "resourceId": {"kind": "youtube#video", "videoId": video_id}}}
+    _call(youtube.playlistItems().insert(part="snippet", body=body))
+
+
 # ---------- upload ----------
 
 def to_utc_rfc3339(local: str, timezone: str) -> str:
