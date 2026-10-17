@@ -3,6 +3,7 @@
 import datetime as dt
 import json
 import os
+import re
 from contextlib import asynccontextmanager
 from typing import List
 
@@ -290,12 +291,21 @@ def audio_file(audio_id: int):
     return FileResponse(queue.audio_path(row))
 
 
-@app.get("/media/video/{video_id}")
-def video_file(video_id: int):
+@app.get("/media")
+def media_page(request: Request, niche: str = "", status: str = ""):
     with db.session() as conn:
-        row = conn.execute("SELECT video_path FROM videos WHERE id = ?", (video_id,)).fetchone()
+        return page(request, "media.html", **_media_ctx(conn, niche, status))
+
+
+@app.get("/media/video/{video_id}")
+def video_file(video_id: int, download: int = 0):
+    with db.session() as conn:
+        row = conn.execute("SELECT video_path, title FROM videos WHERE id = ?", (video_id,)).fetchone()
     if not row or not row["video_path"] or not os.path.exists(row["video_path"]):
         return Response(status_code=404)
+    if download:
+        name = re.sub(r"[^\w\- ]+", "", row["title"]).strip()[:80] or f"video-{video_id}"
+        return FileResponse(row["video_path"], media_type="video/mp4", filename=f"{name}.mp4")
     return FileResponse(row["video_path"], media_type="video/mp4")
 
 
@@ -535,6 +545,39 @@ def _content_ctx(conn, niche: str):
         "can_render": queue.can_render(niche),
         "gemini": ai_drafts.status(conn), "drafts": ai_drafts.recent(conn, niche),
         "items_text": f"{spec.items.min_count}–{spec.items.max_count} {spec.items.label}s" if spec.items.min_count != spec.items.max_count else f"{spec.items.min_count} {spec.items.label}s",
+    }
+
+
+MEDIA_FILTERS = {"rendered": ("rendered",), "youtube": ("uploading", "scheduled", "published")}
+
+
+def _media_ctx(conn, niche: str, status: str):
+    """Every rendered video file on this PC, newest first, with its size and shape."""
+    rows = conn.execute(
+        "SELECT v.id, v.title, v.status, v.publish_at, v.duration_s, v.video_path, v.youtube_video_id, v.channel_id, "
+        "c.name channel_name, c.niche, a.title audio_title FROM videos v JOIN channels c ON c.id = v.channel_id "
+        "LEFT JOIN audio a ON a.id = v.audio_id WHERE v.is_mock = 0 AND v.video_path IS NOT NULL ORDER BY v.id DESC").fetchall()
+    videos = []
+    for r in rows:
+        v = dict(r)
+        if not os.path.exists(v["video_path"]):
+            continue
+        stat = os.stat(v["video_path"])
+        v["size"] = stat.st_size
+        v["rendered_at"] = timeutil.fmt(dt.datetime.fromtimestamp(stat.st_mtime))
+        v["aspect"] = NICHES[v["niche"]].aspect_ratio if v["niche"] in NICHES else "9:16"
+        videos.append(v)
+    counts = {}
+    for v in videos:
+        counts[v["niche"]] = counts.get(v["niche"], 0) + 1
+    niche = niche if niche in NICHES else ""
+    status = status if status in MEDIA_FILTERS else ""
+    shown = [v for v in videos if (not niche or v["niche"] == niche) and (not status or v["status"] in MEDIA_FILTERS[status])]
+    return {
+        "niches": [{"id": k, "name": s.name, "count": counts.get(k, 0)} for k, s in NICHES.items()],
+        "niche": niche, "status": status, "all_count": len(videos),
+        "shorts": [v for v in shown if v["aspect"] == "9:16"], "wide": [v for v in shown if v["aspect"] != "9:16"],
+        "shown_count": len(shown), "shown_seconds": sum(v["duration_s"] or 0 for v in shown), "shown_bytes": sum(v["size"] for v in shown),
     }
 
 

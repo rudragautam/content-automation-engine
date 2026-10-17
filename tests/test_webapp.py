@@ -77,7 +77,7 @@ class TestFreshHub(unittest.TestCase):
     def test_no_mock_data_and_pages_render_empty(self):
         with db.session() as conn:
             self.assertEqual(conn.execute("SELECT COUNT(*) FROM channels").fetchone()[0], 0)
-        for url in ["/", "/?days=90", "/schedule", "/content", "/content?niche=crime_files", "/audio", "/analytics", "/settings"]:
+        for url in ["/", "/?days=90", "/schedule", "/content", "/media", "/content?niche=crime_files", "/audio", "/analytics", "/settings"]:
             with self.subTest(url=url):
                 r = self.client.get(url)
                 self.assertEqual(r.status_code, 200)
@@ -87,7 +87,7 @@ class TestFreshHub(unittest.TestCase):
 class TestPages(HubTestCase):
     def test_every_page_renders(self):
         for url in ["/", "/?days=7", "/?days=90", "/channels/1", "/schedule", "/schedule?channel=2",
-                    "/content", "/content?niche=crime_files", "/audio", "/analytics?days=90"]:
+                    "/content", "/content?niche=crime_files", "/media", "/media?niche=geeta_gyaan&status=rendered", "/audio", "/analytics?days=90"]:
             with self.subTest(url=url):
                 self.assertEqual(self.client.get(url).status_code, 200)
 
@@ -98,6 +98,26 @@ class TestPages(HubTestCase):
             mock.seed(conn)
             self.assertEqual(conn.execute("SELECT COUNT(*) FROM channels").fetchone()[0], before)
         self.assertEqual(before, 20)
+
+    def test_media_library_lists_rendered_videos_and_downloads(self):
+        self.upload([self.spec.example])
+        vid = self.own_videos()[0]["id"]
+        self.assertIn("No rendered videos yet", self.client.get("/media").text)
+        path = f"{self.tmp}/final.mp4"
+        with open(path, "wb") as f:
+            f.write(b"x" * 4096)
+        with db.session() as conn:
+            conn.execute("UPDATE videos SET status = 'rendered', video_path = ?, duration_s = 20 WHERE id = ?", (path, vid))
+        page = self.client.get("/media").text
+        self.assertIn(f"/media/video/{vid}#t=1.5", page)
+        self.assertIn("Shorts (9:16)", page)
+        self.assertIn("No videos match", self.client.get("/media?status=youtube").text)
+        self.assertIn("No videos match", self.client.get("/media?niche=crime_files").text)
+        self.assertIn(f"/media/video/{vid}", self.client.get("/media?niche=focus_habits&status=rendered").text)
+        r = self.client.get(f"/media/video/{vid}?download=1")
+        self.assertEqual(r.status_code, 200)
+        self.assertIn("attachment", r.headers["content-disposition"])
+        self.assertEqual(self.client.get(f"/media/video/{vid}", headers={"Range": "bytes=0-99"}).status_code, 206)
 
     def test_template_download(self):
         r = self.client.get("/content/geeta_gyaan/template.xlsx")
