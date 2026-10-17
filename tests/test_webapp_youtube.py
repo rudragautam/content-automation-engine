@@ -38,13 +38,13 @@ class TestYouTubeConnection(HubTestCase):
         r = self.client.post("/settings/client", files={"file": ("x.json", b'{"type": "service_account"}', "application/json")})
         self.assertIn("an OAuth client file", r.text)
         self.save_client()
-        self.assertIn("Client file saved", self.client.get("/settings").text)
+        self.assertIn("Client saved", self.client.get("/settings").text)
 
     def test_client_can_be_pasted_as_id_and_secret(self):
         self.assertIn("isn&#39;t a Client ID", self.client.post("/settings/client-keys", data={"client_id": "abc", "client_secret": "s"}).text)
         self.assertIn("Paste the Client secret", self.client.post("/settings/client-keys", data={"client_id": "1-x.apps.googleusercontent.com", "client_secret": ""}).text)
         page = self.client.post("/settings/client-keys", data={"client_id": " 1-x.apps.googleusercontent.com ", "client_secret": "GOCSPX-abc "}).text
-        self.assertIn("Client file saved", page)
+        self.assertIn("Client saved", page)
         self.assertNotIn("GOCSPX-abc", page)
         status = youtube_sync.client_status("http://testserver/")
         self.assertEqual((status["kind"], status["redirect_ok"]), ("web", True))
@@ -126,7 +126,7 @@ class TestYouTubeConnection(HubTestCase):
         state = parse_qs(urlparse(r.headers["location"]).query)["state"][0]
         page = self.client.get(f"/oauth/callback?state={state}&error=access_denied")
         self.assertIn("You cancelled the sign-in", page.text)
-        self.assertIn("Connect a YouTube channel", page.text)
+        self.assertIn("Channel already on YouTube?", page.text)
         with db.session() as conn:
             self.assertEqual(conn.execute("SELECT COUNT(*) FROM channels WHERE is_mock = 0").fetchone()[0], 0)
 

@@ -579,6 +579,16 @@ def settings_add_channel(name: str = Form(""), niche: str = Form(""), slots: str
         return RedirectResponse(f"/settings?problem={_q(e)}", status_code=303)
 
 
+@app.post("/settings/channels/{channel_id}/niche")
+def settings_channel_niche(channel_id: int, niche: str = Form("")):
+    try:
+        with db.session() as conn:
+            youtube_sync.set_niche(conn, channel_id, niche)
+        return RedirectResponse(f"/settings?notice={_q('Niche changed to ' + NICHES[niche].name + '.')}#channels", status_code=303)
+    except ActionError as e:
+        return RedirectResponse(f"/settings?problem={_q(e)}#channels", status_code=303)
+
+
 @app.post("/settings/connect")
 def settings_connect(request: Request, niche: str = Form(""), slots: str = Form("")):
     try:
@@ -672,11 +682,24 @@ def _q(message) -> str:
 
 
 def _settings_ctx(conn, request: Request):
+    channels = [dict(r) for r in conn.execute(
+        "SELECT id, name, handle, angle, niche, connection, is_mock, youtube_channel_id, google_account, last_synced_at FROM channels "
+        "ORDER BY is_mock, connection != 'connected', niche, name")]
+    real = [c for c in channels if not c["is_mock"]]
+    # On YouTube = linked to a YouTube channel (connected now, or its sign-in expired). Grouped by Google account.
+    on_youtube = [c for c in real if c["youtube_channel_id"]]
+    accounts: dict = {}
+    for c in sorted(on_youtube, key=lambda c: (not c["google_account"], (c["google_account"] or "").lower())):
+        accounts.setdefault(c["google_account"] or "", []).append(c)
     return {
         "client": youtube_sync.client_status(str(request.base_url)),
         "gemini": ai_drafts.status(conn),
-        "channels": [dict(r) for r in conn.execute("SELECT id, name, handle, angle, niche, connection, is_mock, youtube_channel_id, last_synced_at FROM channels "
-                     "ORDER BY is_mock, connection != 'connected', niche, name")],
+        "channels": channels,
+        "accounts": list(accounts.items()),
+        "on_youtube": on_youtube,
+        "planned": [c for c in real if not c["youtube_channel_id"]],
+        "mock_channels": [c for c in channels if c["is_mock"]],
+        "ready_counts": dict(conn.execute("SELECT channel_id, COUNT(*) FROM videos WHERE status = 'rendered' GROUP BY channel_id").fetchall()),
         "mock_count": conn.execute("SELECT COUNT(*) FROM channels WHERE is_mock = 1").fetchone()[0],
         "niche_options": [(k, s.name) for k, s in NICHES.items()],
     }

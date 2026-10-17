@@ -10,6 +10,7 @@ per Google Cloud project. Until the project passes YouTube's API audit,
 YouTube keeps API uploads private and ignores publishAt.
 """
 
+import base64
 import datetime as dt
 import json
 import logging
@@ -25,6 +26,9 @@ SCOPES = [
     "https://www.googleapis.com/auth/youtube",
     "https://www.googleapis.com/auth/yt-analytics.readonly",
 ]
+# Asked for at sign-in only, so the hub can show which Google account a channel uses.
+# Stored sign-ins keep working with SCOPES alone.
+LOGIN_SCOPES = SCOPES + ["openid", "https://www.googleapis.com/auth/userinfo.email"]
 UPLOAD_COST = 1600
 TITLE_LIMIT = 100
 DESCRIPTION_LIMIT = 5000
@@ -67,7 +71,7 @@ def authorization_url(client_path: str, redirect_uri: str, state: str) -> Tuple[
     """URL of Google's consent screen, and the PKCE verifier needed to finish the sign-in."""
     from google_auth_oauthlib.flow import Flow
 
-    flow = Flow.from_client_secrets_file(client_path, scopes=SCOPES, redirect_uri=redirect_uri, state=state, autogenerate_code_verifier=True)
+    flow = Flow.from_client_secrets_file(client_path, scopes=LOGIN_SCOPES, redirect_uri=redirect_uri, state=state, autogenerate_code_verifier=True)
     # offline + consent so Google always returns a refresh token for unattended uploads.
     url, _ = flow.authorization_url(access_type="offline", prompt="consent select_account", include_granted_scopes="true")
     return url, flow.code_verifier
@@ -78,7 +82,7 @@ def exchange_code(client_path: str, redirect_uri: str, state: str, code: str, co
 
     # Partial grants are checked below with a clear message instead of oauthlib's bare Warning.
     os.environ.setdefault("OAUTHLIB_RELAX_TOKEN_SCOPE", "1")
-    flow = Flow.from_client_secrets_file(client_path, scopes=SCOPES, redirect_uri=redirect_uri, state=state)
+    flow = Flow.from_client_secrets_file(client_path, scopes=LOGIN_SCOPES, redirect_uri=redirect_uri, state=state)
     flow.code_verifier = code_verifier
     try:
         flow.fetch_token(code=code)
@@ -93,6 +97,20 @@ def exchange_code(client_path: str, redirect_uri: str, state: str, code: str, co
     if missing:
         raise YouTubeError("Some permissions were left unticked on Google's screen. Connect again and allow all of them.")
     return creds
+
+
+def account_email(creds) -> str:
+    """The Google account behind a fresh sign-in, from its ID token ('' if Google didn't send one).
+    The token came straight from Google's token endpoint over TLS, so it is only decoded, not verified."""
+    token = getattr(creds, "id_token", None)
+    if not token or token.count(".") != 2:
+        return ""
+    payload = token.split(".")[1]
+    try:
+        data = json.loads(base64.urlsafe_b64decode(payload + "=" * (-len(payload) % 4)))
+    except ValueError:
+        return ""
+    return str(data.get("email") or "")[:200]
 
 
 def save_credentials(creds, path: str) -> None:

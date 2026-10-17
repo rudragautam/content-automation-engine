@@ -61,7 +61,10 @@ def client_status(base_url: str) -> Dict[str, Any]:
         return {"present": False, "redirect_uri": uri, "error": str(e)}
     cid = cfg["client_id"]
     registered = cfg["kind"] == "installed" or uri in cfg["redirect_uris"]
-    return {"present": True, "kind": cfg["kind"], "client_id": cid[:12] + "…" + cid[-28:], "redirect_uri": uri, "redirect_ok": registered}
+    # Opened at another address than the registered one (localhost vs 127.0.0.1): say where sign-in works.
+    others = [u[: -len("/oauth/callback")] for u in cfg["redirect_uris"] if u.endswith("/oauth/callback") and u != uri]
+    return {"present": True, "kind": cfg["kind"], "client_id": cid[:12] + "…" + cid[-28:], "redirect_uri": uri, "redirect_ok": registered,
+            "use_instead": "" if registered or not others else others[0]}
 
 
 def save_client_file(data: bytes) -> None:
@@ -188,8 +191,24 @@ def finish_connect(conn, state: str, code: str, base_url: str) -> int:
         else:
             channel_id = _insert_channel(conn, found["title"], pending["niche"], pending["slots"], found["handle"])
     bind_channel(conn, channel_id, found)
+    account = yt.account_email(creds)
+    if account:
+        conn.execute("UPDATE channels SET google_account = ? WHERE id = ?", (account, channel_id))
     yt.save_credentials(creds, token_path(channel_id))
     return channel_id
+
+
+def set_niche(conn, channel_id: int, niche: str) -> None:
+    """Move a channel to another niche. Not while it has content waiting to render: that was written for the old niche."""
+    if niche not in NICHES:
+        raise ActionError("Pick a niche.")
+    waiting = conn.execute(
+        "SELECT COUNT(*) FROM videos WHERE channel_id = ? AND content_json IS NOT NULL "
+        "AND status NOT IN ('rendered', 'uploading', 'scheduled', 'published')", (channel_id,)).fetchone()[0]
+    if waiting:
+        raise ActionError(f"This channel has {waiting} video{'s' if waiting != 1 else ''} waiting to render, written for its current niche. "
+                          "Render or delete them first, then change the niche.")
+    conn.execute("UPDATE channels SET niche = ? WHERE id = ? AND is_mock = 0", (niche, channel_id))
 
 
 def bind_channel(conn, channel_id: int, found: Dict[str, Any]) -> None:

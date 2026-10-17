@@ -1,65 +1,169 @@
 {% extends "base.html" %}
 {% from "_macros.html" import connection %}
 {% block title %}Settings{% endblock %}
+{% macro niche_select(c) -%}
+<form method="post" action="/settings/channels/{{ c.id }}/niche" class="niche-form">
+  <select name="niche" aria-label="Niche of {{ c.name }}" onchange="this.form.requestSubmit()">
+    {% for k, name in niche_options %}<option value="{{ k }}" {{ 'selected' if k == c.niche }}>{{ name }}</option>{% endfor %}
+  </select>
+</form>
+{%- endmacro %}
+{% macro channel_cell(c) -%}
+<a class="cell-title" href="/channels/{{ c.id }}">{{ c.name }}</a>{% if c.handle %} <span class="muted">{{ c.handle }}</span>{% endif %}
+{% if c.angle %}<div class="muted channel-angle">{{ c.angle }}</div>{% endif %}
+{%- endmacro %}
 {% block content %}
 <div class="page-head">
   <div>
     <h1>Settings</h1>
-    <div class="sub">Connect the hub to YouTube, add your real channels and clear the mock data.</div>
+    <div class="sub">Your channels, the Google accounts they sign in with, and the keys the hub needs.</div>
   </div>
 </div>
 {% if notice %}<div class="notice ok">{{ notice }}</div>{% endif %}
 {% if problem %}<div class="notice bad">{{ problem }}</div>{% endif %}
 
-<div class="grid cols-2">
-  <section class="card">
-    <h2>1. Google Cloud OAuth client</h2>
-    {% if client.present %}
-      <p><span class="chip good"><span class="i">✓</span>Client file saved</span> <span class="muted">{{ client.kind }} · {{ client.client_id }}</span></p>
-      {% if not client.redirect_ok %}
-      <div class="notice bad">This client doesn't list the hub's redirect URI. In Google Cloud → Credentials → your OAuth client, add <code>{{ client.redirect_uri }}</code> under <em>Authorized redirect URIs</em>, then download the file again and upload it here.</div>
-      {% endif %}
-    {% else %}
-      <p><span class="chip warning"><span class="i">–</span>No client file yet</span></p>
-      {% if client.error %}<div class="notice bad">{{ client.error }}</div>{% endif %}
-    {% endif %}
-    <form method="post" action="/settings/client" enctype="multipart/form-data" class="form-row" style="margin-top:10px">
-      <label class="field">OAuth client JSON
-        <input type="file" name="file" accept=".json,application/json" required>
-      </label>
-      <button class="btn primary" type="submit">{{ 'Replace' if client.present else 'Save' }} client file</button>
-    </form>
-    <details style="margin-top:12px"{% if not client.present %} open{% endif %}>
-      <summary class="muted" style="cursor:pointer;font-size:12.5px">No JSON file? Paste the Client ID and Client secret instead</summary>
-      <form method="post" action="/settings/client-keys" class="form-row" style="margin-top:8px">
-        <label class="field" style="flex:2;min-width:240px">Client ID
-          <input type="text" name="client_id" required autocomplete="off" placeholder="1234…apps.googleusercontent.com">
-        </label>
-        <label class="field" style="flex:1;min-width:180px">Client secret
-          <input type="password" name="client_secret" required autocomplete="off" placeholder="GOCSPX-…">
-        </label>
-        <button class="btn primary" type="submit">Save</button>
-      </form>
-      <p class="muted" style="margin-top:6px;font-size:12.5px">The client must be a <strong>Web application</strong> with <code>{{ client.redirect_uri }}</code> under Authorized redirect URIs. Channels already connected keep working after you switch clients.</p>
-    </details>
-    <p class="muted" style="margin-top:8px;font-size:12.5px">Stored only on this PC, in <code>output/hub/secrets/</code>, which git ignores.</p>
-  </section>
-
-  <section class="card">
-    <h2>How to get the client file (one time)</h2>
-    <ol class="steps">
-      <li>Open <a href="https://console.cloud.google.com/projectcreate" target="_blank" rel="noopener">Google Cloud</a> and create a project, e.g. “Content Hub”.</li>
-      <li>In <em>APIs &amp; Services → Library</em>, enable <strong>YouTube Data API v3</strong> and <strong>YouTube Analytics API</strong>.</li>
-      <li>In <em>OAuth consent screen</em>: choose <strong>External</strong>, fill in the app name and your email, and add your own Google account under <strong>Test users</strong>.</li>
-      <li>In <em>Credentials → Create credentials → OAuth client ID</em>: type <strong>Web application</strong>, and add this exact <em>Authorized redirect URI</em>:<br><code>{{ client.redirect_uri }}</code></li>
-      <li>Download the JSON and upload it on the left.</li>
-    </ol>
-    <p class="muted" style="margin-top:8px;font-size:12.5px">While the app is in testing mode Google expires sign-ins after 7 days, so channels need reconnecting weekly. Publishing the app (and passing YouTube's API audit) removes that limit and lets uploads go public.</p>
-  </section>
+<div class="setup-checklist">
+  <a class="check-item" href="#google">
+    {% if client.present and (client.redirect_ok or client.use_instead) %}<span class="chip good"><span class="i">✓</span>Ready</span>{% else %}<span class="chip warning"><span class="i">!</span>Needed</span>{% endif %}
+    <strong>Google sign-in</strong><span class="muted">{% if client.use_instead %}Works at {{ client.use_instead }}{% else %}OAuth client that lets channels sign in{% endif %}</span>
+  </a>
+  <a class="check-item" href="#gemini">
+    {% if gemini.configured %}<span class="chip good"><span class="i">✓</span>Ready</span>{% else %}<span class="chip warning"><span class="i">!</span>Needed</span>{% endif %}
+    <strong>Gemini</strong><span class="muted">{{ gemini.model if gemini.configured else 'Writes scripts, names and channel setup' }}</span>
+  </a>
+  <a class="check-item" href="#channels">
+    <span class="chip {{ 'good' if on_youtube else 'warning' }}"><span class="i">{{ on_youtube | length }}</span>on YouTube</span>
+    {% set known = accounts | selectattr(0) | list | length %}
+    <strong>Channels</strong><span class="muted">{{ known }} Google account{{ '' if known == 1 else 's' }} known · {{ planned | length }} planned</span>
+  </a>
 </div>
 
+<section class="card section" id="channels">
+  <div class="card-head"><h2>Your channels</h2></div>
+  {% if client.use_instead %}
+  <div class="notice">You opened the hub at an address Google doesn't know. Sign-ins only work at
+    <a href="{{ client.use_instead }}/settings"><strong>{{ client.use_instead }}</strong></a>; open the hub there to connect or reconnect.</div>
+  {% endif %}
+  <p class="secondary" style="margin-bottom:14px">There's no single logged-in account. Each channel signs in to YouTube on its own, so channels from different Google accounts work side by side. The hub uploads to a channel with that channel's own sign-in.</p>
+
+  <div class="add-choices">
+    <div class="add-choice">
+      <h3>Channel already on YouTube?</h3>
+      <p class="muted">Sign in with the Google account that owns it and pick the channel on Google's screen. It's added with its YouTube name.</p>
+      {% if client.present %}
+      <form method="post" action="/settings/connect" class="form-row">
+        <label class="field">Its niche
+          <select name="niche" required>{% for k, name in niche_options %}<option value="{{ k }}">{{ name }}</option>{% endfor %}</select>
+        </label>
+        <label class="field">Publish times <input type="text" name="slots" value="19:00" placeholder="09:00, 19:00" size="12"></label>
+        <button class="btn primary" type="submit">Connect with Google</button>
+      </form>
+      {% else %}
+      <p class="secondary">Set up <a href="#google">Google sign-in</a> first.</p>
+      {% endif %}
+    </div>
+    <div class="add-choice">
+      <h3>Want a new channel?</h3>
+      <p class="muted">Plan it here with a name from Gemini. Then create it on YouTube with that name, and press <strong>Connect</strong> on its row below.</p>
+      <a class="btn" href="#plan" onclick="document.getElementById('plan').open = true">✨ Plan a new channel</a>
+    </div>
+  </div>
+
+  <h3 class="group-title">On YouTube <span class="muted">· {{ on_youtube | length }}</span></h3>
+  {% if not on_youtube %}
+  <div class="empty">No channels connected yet. Use “Connect with Google” above.</div>
+  {% endif %}
+  {% for account, items in accounts %}
+  <div class="account-group">
+    <div class="account-head">
+      {% if account %}
+      <span class="account-avatar" aria-hidden="true">{{ account[:1] | upper }}</span>
+      <div><strong>{{ account }}</strong><div class="muted">Google account · {{ items | length }} channel{{ '' if items | length == 1 else 's' }}</div></div>
+      {% else %}
+      <span class="account-avatar unknown" aria-hidden="true">?</span>
+      <div><strong>Google account not recorded</strong><div class="muted">These were connected before the hub noted the account. Press Reconnect on one and it shows here.</div></div>
+      {% endif %}
+    </div>
+    <div class="table-wrap"><table>
+      <thead><tr><th>Channel</th><th>Niche</th><th>Sign-in</th><th>Last sync</th><th></th></tr></thead>
+      <tbody>{% for c in items %}
+        <tr>
+          <td>{{ channel_cell(c) }}</td>
+          <td>{{ niche_select(c) }}</td>
+          <td>{{ connection(c.connection) }}</td>
+          <td class="num">{{ c.last_synced_at | when }}</td>
+          <td class="r nowrap">
+            <a class="btn small" href="/channels/{{ c.id }}/setup" target="setup-{{ c.id }}" data-setup-window>Set up ↗</a>
+            <a class="btn small {{ 'primary' if c.connection != 'connected' }}" href="/oauth/start?channel={{ c.id }}" title="Sign in again with this channel's Google account">Reconnect</a>
+            <a class="btn small" href="/channels/{{ c.id }}">Open</a>
+          </td>
+        </tr>
+      {% endfor %}</tbody>
+    </table></div>
+  </div>
+  {% endfor %}
+
+  <h3 class="group-title">Planned · not on YouTube yet <span class="muted">· {{ planned | length }}</span></h3>
+  {% if planned %}
+  <ol class="steps steps-inline">
+    <li>On YouTube, open your profile → <a href="https://www.youtube.com/channel_switcher" target="_blank" rel="noopener">Switch account → Create a channel ↗</a>, using the name and handle shown.</li>
+    <li>Press <strong>Connect</strong> on that channel's row here.</li>
+    <li>On Google's screen, pick the new channel. It then moves up to “On YouTube”.</li>
+  </ol>
+  <div class="table-wrap"><table>
+    <thead><tr><th>Channel</th><th>Niche</th><th>Videos ready</th><th></th></tr></thead>
+    <tbody>{% for c in planned %}
+      <tr>
+        <td>{{ channel_cell(c) }}</td>
+        <td>{{ niche_select(c) }}</td>
+        <td class="num secondary">{{ ready_counts.get(c.id, 0) }}</td>
+        <td class="r nowrap">
+          {% if client.present %}<a class="btn small primary" href="/oauth/start?channel={{ c.id }}">Connect</a>{% endif %}
+          <a class="btn small" href="/channels/{{ c.id }}/setup" target="setup-{{ c.id }}" data-setup-window>Set up ↗</a>
+          <a class="btn small" href="/channels/{{ c.id }}">Open</a>
+        </td>
+      </tr>
+    {% endfor %}</tbody>
+  </table></div>
+  {% else %}
+  <div class="empty">No planned channels. Plan one below.</div>
+  {% endif %}
+
+  <details class="plan-panel" id="plan">
+    <summary><strong>✨ Plan a new channel</strong> <span class="muted">Gemini suggests names for a niche; a niche can have several channels, each with its own angle.</span></summary>
+    <div class="name-suggest" data-name-suggest data-mode="fill" data-niche-from="#plan-niche" data-form="#plan-form">
+      <div class="form-row">
+        <label class="field">Niche
+          <select id="plan-niche" name="niche" form="plan-form" required>{% for k, name in niche_options %}<option value="{{ k }}">{{ name }}</option>{% endfor %}</select>
+        </label>
+        <label class="field" style="flex:1;min-width:220px">Idea for Gemini (optional)
+          <input type="text" data-idea maxlength="300" placeholder="e.g. Hindi, for kids 6–10, animal stories">
+        </label>
+        <button class="btn" type="button" data-suggest>✨ Suggest names</button>
+      </div>
+      <div class="notice gen-status" data-status role="status" hidden></div>
+      <div class="name-cards" data-results></div>
+    </div>
+    <form method="post" action="/settings/channels" class="form-row" id="plan-form" style="margin-top:10px">
+      <label class="field">Channel name <input type="text" name="name" required maxlength="100" placeholder="e.g. Focus Daily"></label>
+      <label class="field">@handle <input type="text" name="handle" maxlength="31" placeholder="@focusdaily"></label>
+      <label class="field" style="flex:1;min-width:220px">Angle <input type="text" name="angle" maxlength="160" placeholder="Who it's for and what makes it different"></label>
+      <label class="field">Publish times <input type="text" name="slots" value="19:00" placeholder="09:00, 19:00" size="12"></label>
+      <button class="btn primary" type="submit">Add planned channel</button>
+    </form>
+  </details>
+
+  {% if mock_channels %}
+  <h3 class="group-title">Mock (simulated) <span class="muted">· {{ mock_channels | length }}</span></h3>
+  <p class="secondary">Simulated channels with made-up stats. Remove them once your real channels are added; your own content stays.</p>
+  <form method="post" action="/settings/remove-mock" style="margin-top:8px" onsubmit="return confirm('Remove all {{ mock_count }} mock channels and their simulated data? This can’t be undone.')">
+    <button class="btn danger" type="submit">Remove mock data</button>
+  </form>
+  {% endif %}
+</section>
+
 <section class="card section" id="gemini">
-  <div class="card-head"><h2>Gemini (writes content for you)</h2>
+  <div class="card-head"><h2>Gemini</h2>
     {% if gemini.configured %}<span class="chip good"><span class="i">✓</span>Key saved</span>{% else %}<span class="chip warning"><span class="i">–</span>No key yet</span>{% endif %}
   </div>
   <div class="grid cols-2">
@@ -68,8 +172,8 @@
         <p class="secondary">Key <code>{{ gemini.masked }}</code>{% if gemini.from_env %} (from the GEMINI_API_KEY environment variable){% endif %}.</p>
         {% if gemini.models %}
         <form method="post" action="/settings/gemini/model" class="form-row" style="margin-bottom:12px">
-          <label class="field">Model
-            <select name="model">{% for m in gemini.models %}<option value="{{ m.id }}" {{ 'selected' if m.id == gemini.model }}>{{ m.name }} ({{ m.id }})</option>{% endfor %}</select>
+          <label class="field" style="flex:1 1 220px">Model
+            <select name="model" style="width:100%">{% for m in gemini.models %}<option value="{{ m.id }}" {{ 'selected' if m.id == gemini.model }}>{{ m.name }} ({{ m.id }})</option>{% endfor %}</select>
           </label>
           <button class="btn" type="submit">Use this model</button>
         </form>
@@ -88,78 +192,56 @@
       {% endif %}
     </div>
     <div>
-      <ol class="steps">
+      <p class="secondary">Gemini writes video scripts, channel names, the channel setup text and the banner and watermark. Each is one request to the model picked here.</p>
+      <ol class="steps" style="margin-top:8px">
         <li>Create a key at <a href="https://aistudio.google.com/apikey" target="_blank" rel="noopener">Google AI Studio → API keys</a>.</li>
-        <li>Paste it here. The hub tests it by listing the models it can use and picks the newest <strong>Flash-Lite</strong> model, the cheapest one that writes these short scripts well; you can change that.</li>
-        <li>Generate on the <a href="/content">Content</a> page: pick a niche, a topic and how many videos.</li>
+        <li>Paste it here. The hub tests it and picks the newest <strong>Flash-Lite</strong> model, the cheapest that does these jobs well.</li>
       </ol>
-      <p class="muted" style="margin-top:8px;font-size:12.5px">Stored only on this PC in <code>output/hub/secrets/</code>. On Gemini's free tier Google may use prompts to improve its products and limits requests per minute; a paid key doesn't.</p>
+      <p class="muted" style="margin-top:8px;font-size:12.5px">Stored only on this PC in <code>output/hub/secrets/</code>. On the free tier Google may use prompts to improve its products and image models aren't included.</p>
     </div>
   </div>
 </section>
 
-<section class="card section" id="channels">
-  <div class="card-head"><h2>2. Your channels</h2><span class="muted">{{ channels | length }}</span></div>
-  <h3 style="margin-bottom:6px">Connect a YouTube channel</h3>
-  {% if client.present %}
-  <form method="post" action="/settings/connect" class="form-row">
-    <label class="field">Niche
-      <select name="niche" required>{% for k, name in niche_options %}<option value="{{ k }}">{{ name }}</option>{% endfor %}</select>
-    </label>
-    <label class="field">Publish times <input type="text" name="slots" value="19:00" placeholder="09:00, 19:00"></label>
-    <button class="btn primary" type="submit">Connect with Google</button>
-  </form>
-  <p class="muted" style="font-size:12.5px;margin:8px 0 14px">Sign in with the Google account that owns the channel and pick the channel on Google's list. The hub adds it with its YouTube name. Repeat for each channel; connecting one that's already here just renews its sign-in.</p>
-  {% else %}
-  <p class="secondary" style="margin-bottom:14px">Save the OAuth client file above first.</p>
-  {% endif %}
-  <h3 style="margin-bottom:6px" id="plan">Plan a new channel</h3>
-  <p class="muted" style="font-size:12.5px;margin-bottom:8px">Not on YouTube yet? Pick a niche and let Gemini name it. A niche can have several channels; Gemini gives each new one its own angle. Connect it with Google once you've created it on YouTube.</p>
-  <div class="name-suggest" data-name-suggest data-mode="fill" data-niche-from="#plan-niche" data-form="#plan-form">
-    <div class="form-row">
-      <label class="field">Niche
-        <select id="plan-niche" name="niche" form="plan-form" required>{% for k, name in niche_options %}<option value="{{ k }}">{{ name }}</option>{% endfor %}</select>
-      </label>
-      <label class="field" style="flex:1;min-width:220px">Idea for Gemini (optional)
-        <input type="text" data-idea maxlength="300" placeholder="e.g. Hindi, for kids 6–10, animal stories">
-      </label>
-      <button class="btn" type="button" data-suggest>✨ Suggest names</button>
+<section class="card section" id="google">
+  <details {{ 'open' if not (client.present and (client.redirect_ok or client.use_instead)) }}>
+    <summary class="card-head summary-head"><h2>Google sign-in (OAuth client)</h2>
+      {% if client.present %}<span class="chip good"><span class="i">✓</span>Client saved</span> <span class="muted">{{ client.client_id }}</span>{% else %}<span class="chip warning"><span class="i">–</span>Not set up</span>{% endif %}
+    </summary>
+    <p class="secondary" style="margin:10px 0">One-time setup. This is the hub's own “app” in Google Cloud. It isn't a channel or an account: every channel and every Google account signs in through it.</p>
+    {% if client.use_instead %}
+    <div class="notice">This client is registered for <a href="{{ client.use_instead }}/settings">{{ client.use_instead }}</a>. Open the hub at that address to sign in, or add <code>{{ client.redirect_uri }}</code> to the client's Authorized redirect URIs in Google Cloud.</div>
+    {% elif client.present and not client.redirect_ok %}
+    <div class="notice bad">This client doesn't list the hub's redirect URI. In Google Cloud → Credentials → your OAuth client, add <code>{{ client.redirect_uri }}</code> under <em>Authorized redirect URIs</em>, then save the client here again.</div>
+    {% endif %}
+    {% if client.error %}<div class="notice bad">{{ client.error }}</div>{% endif %}
+    <div class="grid cols-2">
+      <div>
+        <form method="post" action="/settings/client-keys" class="form-row">
+          <label class="field" style="flex:2;min-width:240px">Client ID
+            <input type="text" name="client_id" required autocomplete="off" placeholder="1234…apps.googleusercontent.com">
+          </label>
+          <label class="field" style="flex:1;min-width:180px">Client secret
+            <input type="password" name="client_secret" required autocomplete="off" placeholder="GOCSPX-…">
+          </label>
+          <button class="btn primary" type="submit">{{ 'Replace' if client.present else 'Save' }}</button>
+        </form>
+        <form method="post" action="/settings/client" enctype="multipart/form-data" class="form-row" style="margin-top:10px">
+          <label class="field">Or upload the OAuth client JSON
+            <input type="file" name="file" accept=".json,application/json" required>
+          </label>
+          <button class="btn" type="submit">Upload file</button>
+        </form>
+        <p class="muted" style="margin-top:8px;font-size:12.5px">Stored only on this PC, in <code>output/hub/secrets/</code>, which git ignores. Channels already connected keep working after you switch clients.</p>
+      </div>
+      <ol class="steps">
+        <li>Open <a href="https://console.cloud.google.com/projectcreate" target="_blank" rel="noopener">Google Cloud</a> and create a project, e.g. “Content Hub”.</li>
+        <li>In <em>APIs &amp; Services → Library</em>, enable <strong>YouTube Data API v3</strong> and <strong>YouTube Analytics API</strong>.</li>
+        <li>In <em>OAuth consent screen</em>: choose <strong>External</strong>, and add <strong>every Google account that owns a channel</strong> under <strong>Test users</strong>.</li>
+        <li>In <em>Credentials → Create credentials → OAuth client ID</em>: type <strong>Web application</strong>, with this <em>Authorized redirect URI</em>:<br><code>{{ client.redirect_uri }}</code></li>
+        <li>Paste the Client ID and secret on the left.</li>
+      </ol>
     </div>
-    <div class="notice gen-status" data-status role="status" hidden></div>
-    <div class="name-cards" data-results></div>
-  </div>
-  <form method="post" action="/settings/channels" class="form-row" id="plan-form" style="margin:10px 0 18px">
-    <label class="field">Channel name <input type="text" name="name" required maxlength="100" placeholder="e.g. Focus Daily"></label>
-    <label class="field">@handle <input type="text" name="handle" maxlength="31" placeholder="@focusdaily"></label>
-    <label class="field" style="flex:1;min-width:220px">Angle <input type="text" name="angle" maxlength="160" placeholder="Who it's for and what makes it different"></label>
-    <label class="field">Publish times <input type="text" name="slots" value="19:00" placeholder="09:00, 19:00"></label>
-    <button class="btn primary" type="submit">Add channel</button>
-  </form>
-  <div class="table-wrap"><table>
-    <thead><tr><th>Channel</th><th>Niche</th><th>Connection</th><th>YouTube ID</th><th>Last sync</th><th></th></tr></thead>
-    <tbody>{% for c in channels %}
-      <tr>
-        <td><a class="cell-title" href="/channels/{{ c.id }}">{{ c.name }}</a>{% if c.handle %} <span class="muted">{{ c.handle }}</span>{% endif %}{% if c.is_mock %} <span class="muted">mock</span>{% endif %}
-          {% if c.angle %}<div class="muted channel-angle">{{ c.angle }}</div>{% endif %}</td>
-        <td class="secondary">{{ niche_name(c.niche) }}</td>
-        <td>{{ connection(c.connection) }}</td>
-        <td class="num secondary">{{ c.youtube_channel_id or '—' }}</td>
-        <td class="num">{{ c.last_synced_at | when }}</td>
-        <td class="r nowrap">{% if not c.is_mock %}{% if c.connection == 'connected' %}<a class="btn small" href="/channels/{{ c.id }}/setup" target="setup-{{ c.id }}" data-setup-window>Set up ↗</a> {% endif %}<a class="btn small" href="/channels/{{ c.id }}">Open</a>{% endif %}</td>
-      </tr>
-    {% endfor %}</tbody>
-  </table></div>
-</section>
-
-<section class="card section">
-  <h2>3. Mock data</h2>
-  {% if mock_count %}
-  <p class="secondary">{{ mock_count }} mock channels with simulated stats and videos are loaded. Remove them once your real channels are added. Your uploaded audio and content for real channels stay.</p>
-  <form method="post" action="/settings/remove-mock" onsubmit="return confirm('Remove all {{ mock_count }} mock channels and their simulated data? This can’t be undone.')">
-    <button class="btn danger" type="submit">Remove mock data</button>
-  </form>
-  {% else %}
-  <p class="secondary"><span class="chip good"><span class="i">✓</span>No mock data</span> Everything shown comes from your own channels.</p>
-  {% endif %}
+    <p class="muted" style="margin-top:8px;font-size:12.5px">While the app is in testing mode Google expires sign-ins after 7 days, so channels need Reconnect weekly. Publishing the app (and passing YouTube's API audit) removes that limit and lets uploads go public.</p>
+  </details>
 </section>
 {% endblock %}

@@ -332,3 +332,37 @@ fieldset.ai-filled { border-radius: 8px; padding: 6px 8px; }
 .name-card p { margin: 0; font-size: 13px; flex: 1; }
 .name-card .btn { align-self: flex-start; }
 .channel-angle { font-size: 12.5px; margin-top: 2px; }
+
+/* Settings: checklist, add choices, channels grouped by Google account */
+.setup-checklist { display: grid; grid-template-columns: repeat(auto-fit, minmax(220px, 1fr)); gap: 12px; margin-bottom: 16px; }
+.check-item { display: flex; flex-direction: column; align-items: flex-start; gap: 4px; padding: 14px 16px; border: 1px solid var(--border); border-radius: 12px; background: var(--surface); color: inherit; text-decoration: none; }
+.check-item:hover { border-color: var(--accent); }
+.check-item .muted { font-size: 12.5px; }
+.add-choices { display: grid; grid-template-columns: repeat(auto-fit, minmax(300px, 1fr)); gap: 12px; margin-bottom: 20px; }
+.add-choice { padding: 14px 16px; border: 1px solid var(--border); border-radius: 12px; background: var(--surface-2); display: flex; flex-direction: column; gap: 8px; align-items: flex-start; }
+.add-choice h3 { margin: 0; }
+.add-choice p { margin: 0; font-size: 13px; }
+.add-choice .form-row { width: 100%; }
+.group-title { margin: 22px 0 10px; padding-top: 14px; border-top: 1px solid var(--border); }
+.account-group { border: 1px solid var(--border); border-radius: 12px; padding: 12px 14px; margin-bottom: 12px; }
+.account-head { display: flex; align-items: center; gap: 12px; margin-bottom: 8px; }
+.account-head .muted { font-size: 12.5px; }
+.account-avatar { flex: none; width: 34px; height: 34px; border-radius: 50%; display: grid; place-items: center; font-weight: 700; background: var(--accent-wash); color: var(--accent-ink); }
+.account-avatar.unknown { background: var(--surface-2); color: var(--muted); }
+.steps-inline { margin: 0 0 12px; font-size: 13px; }
+.plan-panel { margin-top: 18px; padding: 12px 14px; border: 1px dashed var(--border); border-radius: 12px; }
+.plan-panel[open] { border-style: solid; }
+.plan-panel > summary { cursor: pointer; list-style: none; }
+.plan-panel > summary .muted { font-size: 12.5px; }
+.plan-panel[open] > summary { margin-bottom: 12px; }
+.summary-head { cursor: pointer; list-style: none; display: flex; flex-wrap: wrap; align-items: center; gap: 10px; }
+.summary-head::-webkit-details-marker, .plan-panel > summary::-webkit-details-marker { display: none; }
+.summary-head h2::before { content: "▸ "; color: var(--muted); }
+details[open] > .summary-head h2::before { content: "▾ "; }
+.niche-form { margin: 0; }
+.niche-form select { max-width: 220px; }
+.field { min-width: 0; }
+.field select, .field input { max-width: 100%; }
+code { overflow-wrap: anywhere; }
+.grid > * { min-width: 0; }  /* a long select (e.g. a model name) must not widen its column */
+.form-row > .field { max-width: 100%; }
