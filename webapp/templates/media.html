@@ -1,13 +1,14 @@
 {% extends "base.html" %}
-{% from "_macros.html" import status as status_chip, pager %}
+{% from "_macros.html" import status as status_chip, pager, scope_filter %}
 {% block title %}Media library{% endblock %}
 {% macro mmss(s) -%}{{ '%d:%02d' % (((s or 0) // 60) | int, ((s or 0) % 60) | int) }}{%- endmacro %}
 {% block content %}
 <div class="page-head">
   <div>
     <h1>Media library</h1>
-    <div class="sub">Every rendered video on this PC. Click a video to play it.</div>
+    <div class="sub">Every rendered video on this PC{% if scope.active %} · <span class="scope-tag">{{ scope.label }}</span>{% endif %}. Click a video to play it.</div>
   </div>
+  <div class="filters">{{ scope_filter(scope, {'niche': niche, 'status': status}) }}</div>
 </div>
 
 <nav class="pill-list" aria-label="Niches" style="margin-bottom:10px">

@@ -88,6 +88,11 @@ main { padding: 0 28px 48px; min-width: 0; }
 .page-head { display: flex; flex-wrap: wrap; align-items: flex-end; justify-content: space-between; gap: 12px; margin-bottom: 18px; }
 .page-head .sub { color: var(--ink-2); margin-top: 4px; }
 
+/* global channel filter */
+.scope-filter { display: flex; flex-wrap: wrap; gap: 6px; align-items: center; }
+.scope-filter select { padding: 6px 8px; border: 1px solid var(--border); border-radius: 8px; background: var(--surface); color: var(--ink); font: inherit; font-size: 13px; max-width: 260px; }
+.scope-tag { display: inline-flex; align-items: center; gap: 6px; font-size: 12px; font-weight: 600; padding: 2px 8px; border-radius: 999px; background: var(--accent-wash); color: var(--accent-ink); }
+
 /* filters: one row, above the content */
 .filters { display: flex; flex-wrap: wrap; gap: 8px; align-items: center; }
 .seg { display: inline-flex; border: 1px solid var(--border); border-radius: 8px; overflow: hidden; background: var(--surface); }

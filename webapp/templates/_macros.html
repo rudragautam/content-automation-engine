@@ -87,3 +87,22 @@
 </nav>
 {%- endif %}
 {%- endmacro %}
+
+{% macro scope_filter(sc, keep={}) -%}
+{#- Global channel filter: created status + one channel. Remembered in cookies across pages. -#}
+<form class="scope-filter" method="get" aria-label="Channel filter">
+  {% for k, v in keep.items() if v %}<input type="hidden" name="{{ k }}" value="{{ v }}">{% endfor %}
+  <select name="created" aria-label="Which channels" onchange="this.form.ch.value='';this.form.submit()">
+    <option value="all" {{ 'selected' if sc.created == 'all' }}>All channels ({{ sc.total }})</option>
+    <option value="live" {{ 'selected' if sc.created == 'live' }}>Created on YouTube ({{ sc.live | length }})</option>
+    <option value="planned" {{ 'selected' if sc.created == 'planned' }}>Not created yet ({{ sc.planned | length }})</option>
+  </select>
+  <select name="ch" aria-label="Channel" onchange="this.form.submit()">
+    <option value="">{{ {'all': 'Every channel', 'live': 'Every created channel', 'planned': 'Every channel not created yet'}[sc.created] }}</option>
+    {% if sc.created != 'planned' and sc.live %}<optgroup label="Created on YouTube">{% for c in sc.live %}<option value="{{ c.id }}" {{ 'selected' if sc.channel and sc.channel.id == c.id }}>{{ c.name }}</option>{% endfor %}</optgroup>{% endif %}
+    {% if sc.created != 'live' and sc.planned %}<optgroup label="Not created yet">{% for c in sc.planned %}<option value="{{ c.id }}" {{ 'selected' if sc.channel and sc.channel.id == c.id }}>{{ c.name }}</option>{% endfor %}</optgroup>{% endif %}
+  </select>
+  <noscript><button class="btn small" type="submit">Apply</button></noscript>
+  {% if sc.active %}<a class="btn small" href="?{{ dict(keep, created='all', ch='') | urlencode }}">Clear</a>{% endif %}
+</form>
+{%- endmacro %}

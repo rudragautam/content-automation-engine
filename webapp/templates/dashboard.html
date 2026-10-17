@@ -1,13 +1,13 @@
 {% extends "base.html" %}
-{% from "_macros.html" import delta_short, connection, delta, range_filter, status %}
+{% from "_macros.html" import delta_short, connection, delta, range_filter, status, scope_filter %}
 {% block title %}Dashboard{% endblock %}
 {% block content %}
 <div class="page-head">
   <div>
-    <h1>All channels</h1>
-    <div class="sub">{{ channels | length }} channels · last {{ days }} days</div>
+    <h1>{{ scope.label if scope.active else 'All channels' }}</h1>
+    <div class="sub">{{ channels | length }} channel{{ '' if channels | length == 1 else 's' }} · last {{ days }} days</div>
   </div>
-  <div class="filters">{{ range_filter(days, ranges, "/?") }}</div>
+  <div class="filters">{{ scope_filter(scope, {'days': days}) }}{{ range_filter(days, ranges, "/?") }}</div>
 </div>
 
 <div class="tiles">
@@ -25,8 +25,8 @@
 
 <div class="grid cols-3">
   <section class="card span-2">
-    <div class="card-head"><h2>Daily views, all channels</h2><span class="muted">last {{ days }} days</span></div>
-    <div class="chart" data-chart="line" data-src="series-data" data-label="Daily views across all channels"></div>
+    <div class="card-head"><h2>Daily views, {{ scope.label if scope.active else 'all channels' }}</h2><span class="muted">last {{ days }} days</span></div>
+    <div class="chart" data-chart="line" data-src="series-data" data-label="Daily views, {{ scope.label if scope.active else 'all channels' }}"></div>
     <script type="application/json" id="series-data">{{ series | tojson_safe }}</script>
   </section>
   <section class="card">

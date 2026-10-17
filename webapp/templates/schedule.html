@@ -1,21 +1,13 @@
 {% extends "base.html" %}
-{% from "_macros.html" import queue_row, pager %}
+{% from "_macros.html" import queue_row, pager, scope_filter %}
 {% block title %}Schedule{% endblock %}
 {% block content %}
 <div class="page-head">
   <div>
     <h1>Schedule</h1>
-    <div class="sub">Next 14 days across {{ 'all channels' if not channel_filter else 'one channel' }}{% if items.total %} · {{ items.total }} video{{ '' if items.total == 1 else 's' }}{% endif %}. Change any time with Edit.</div>
+    <div class="sub">Next 14 days across {{ scope.label if scope.active else 'all channels' }}{% if items.total %} · {{ items.total }} video{{ '' if items.total == 1 else 's' }}{% endif %}. Change any time with Edit.</div>
   </div>
-  <form class="filters" method="get" action="/schedule">
-    <label class="field" style="grid-auto-flow:column;align-items:center;gap:8px">Channel
-      <select name="channel" onchange="this.form.submit()">
-        <option value="0">All channels</option>
-        {% for c in channels %}<option value="{{ c.id }}" {{ 'selected' if c.id == channel_filter }}>{{ c.name }}</option>{% endfor %}
-      </select>
-    </label>
-    <noscript><button class="btn small" type="submit">Show</button></noscript>
-  </form>
+  <div class="filters">{{ scope_filter(scope) }}</div>
 </div>
 
 <p class="secondary" style="margin-bottom:16px">API quota today: {{ quota.used | compact }} of {{ quota.limit | compact }} units used, about {{ quota.uploads_left }} more uploads fit. Each upload costs about 1,600 units across all channels.</p>

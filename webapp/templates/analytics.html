@@ -1,13 +1,13 @@
 {% extends "base.html" %}
-{% from "_macros.html" import delta_short, delta, range_filter %}
+{% from "_macros.html" import delta_short, delta, range_filter, scope_filter %}
 {% block title %}Analytics{% endblock %}
 {% block content %}
 <div class="page-head">
   <div>
     <h1>Analytics</h1>
-    <div class="sub">Every channel under one umbrella · last {{ days }} days</div>
+    <div class="sub">{% if scope.active %}<span class="scope-tag">{{ scope.label }}</span> · {{ channels | length }} channel{{ '' if channels | length == 1 else 's' }}{% else %}Every channel under one umbrella{% endif %} · last {{ days }} days</div>
   </div>
-  <div class="filters">{{ range_filter(days, ranges, "/analytics?") }}</div>
+  <div class="filters">{{ scope_filter(scope, {'days': days}) }}{{ range_filter(days, ranges, "/analytics?") }}</div>
 </div>
 
 <div class="tiles">

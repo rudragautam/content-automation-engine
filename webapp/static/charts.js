@@ -10,6 +10,8 @@ export function compact(n) {
   for (const [size, s] of [[1e9, "B"], [1e6, "M"], [1e3, "K"]]) {
     if (a >= size) return (n / size).toFixed(1).replace(/\.0$/, "") + s;
   }
+  // Small fractions (a few watch hours) keep one decimal instead of rounding to 0.
+  if (a < 10 && !Number.isInteger(n)) return n.toFixed(1).replace(/\.0$/, "");
   return Math.round(n).toLocaleString();
 }
 const dayLabel = (iso) => { const [, m, d] = iso.split("-"); return `${+d} ${MONTHS[+m - 1]}`; };
@@ -69,7 +71,10 @@ export function lineChart(container, data, { height = 220, unit = "" } = {}) {
     const m = { l: 44, r: 52, t: 12, b: 24 };
     const w = width - m.l - m.r, h = height - m.t - m.b;
     let lo = Math.min(0, ...values), hi = Math.max(...values);
-    const step = niceStep(hi - lo || 1, 4);
+    // Whole-number series (views, subscribers) never get fractional gridlines like 0.25.
+    const whole = values.every((v) => Number.isInteger(v));
+    // Labels show at most one decimal, so gridlines are never closer than 0.1 (or 1 for whole numbers).
+    const step = Math.max(whole ? 1 : 0.1, niceStep(hi - lo || 1, 4));
     lo = Math.floor(lo / step) * step; hi = Math.ceil(hi / step) * step || step;
     const x = (i) => m.l + (data.length === 1 ? w / 2 : (i / (data.length - 1)) * w);
     const y = (v) => m.t + h - ((v - lo) / (hi - lo)) * h;
@@ -79,7 +84,8 @@ export function lineChart(container, data, { height = 220, unit = "" } = {}) {
       el("line", { x1: m.l, x2: m.l + w, y1: y(v), y2: y(v), style: `stroke:${v === 0 ? "var(--axis)" : "var(--grid)"};stroke-width:1` }, svg);
       const t = el("text", { x: m.l - 8, y: y(v) + 4, "text-anchor": "end", class: "axis-text" }, svg); t.textContent = compact(v);
     }
-    const ticks = Math.min(5, data.length);
+    // As many date labels as fit without touching (about 72px each).
+    const ticks = Math.min(5, data.length, Math.max(2, Math.floor(w / 72)));
     for (let k = 0; k < ticks; k++) {
       const i = Math.round((k / Math.max(1, ticks - 1)) * (data.length - 1));
       const t = el("text", { x: x(i), y: height - 6, "text-anchor": k === 0 ? "start" : k === ticks - 1 ? "end" : "middle", class: "axis-text" }, svg);

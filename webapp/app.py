@@ -15,7 +15,7 @@ from markupsafe import Markup
 
 from content_templates import NICHES, workbook_bytes
 from publishing.youtube import YouTubeError
-from webapp import ai_drafts, analytics, db, mock, queue, timeutil, youtube_sync
+from webapp import ai_drafts, analytics, db, mock, queue, scope, timeutil, youtube_sync
 from webapp.paging import paginate
 from webapp.queue import ActionError
 
@@ -52,6 +52,8 @@ def compact(n) -> str:
         if abs(n) >= size:
             value = n / size
             return f"{value:.1f}".rstrip("0").rstrip(".") + suffix
+    if abs(n) < 10 and n != int(n):
+        return f"{n:.1f}"
     return f"{n:,.0f}"
 
 
@@ -79,7 +81,10 @@ def page(request: Request, name: str, **ctx):
         ctx.setdefault("alert_count", len(analytics.alerts(conn)))
         ctx.setdefault("mock_count_global", conn.execute("SELECT COUNT(*) FROM channels WHERE is_mock = 1").fetchone()[0])
     active = ctx.pop("active_override", None) or name.split(".")[0]
-    return templates.TemplateResponse(request, name, {"active": active, "ranges": RANGES, **ctx})
+    response = templates.TemplateResponse(request, name, {"active": active, "ranges": RANGES, **ctx})
+    if "scope" in ctx:
+        scope.keep(ctx["scope"], response)
+    return response
 
 
 def days_param(days: int) -> int:
@@ -96,13 +101,15 @@ def error(e: Exception, status: int = 400) -> JSONResponse:
 def dashboard(request: Request, days: int = 28):
     days = days_param(days)
     with db.session() as conn:
-        rows = analytics.channel_rows(conn, days)
+        sc = scope.resolve(conn, request.query_params, request.cookies)
+        ids = sc["ids"]
+        rows = analytics.channel_rows(conn, days, ids)
         return page(
-            request, "dashboard.html", days=days,
-            kpis=analytics.kpis(conn, days), series=analytics.daily_series(conn, days),
-            channels=rows, by_niche=analytics.views_by_niche(conn, days),
-            alerts=analytics.alerts(conn), low_queue=analytics.low_queue(rows),
-            quota=analytics.quota_today(conn), upcoming=_upcoming(conn, hours=48, limit=8),
+            request, "dashboard.html", days=days, scope=sc,
+            kpis=analytics.kpis(conn, days, ids), series=analytics.daily_series(conn, days, ids),
+            channels=rows, by_niche=analytics.views_by_niche(conn, days, ids),
+            alerts=analytics.alerts(conn, ids), low_queue=analytics.low_queue(rows),
+            quota=analytics.quota_today(conn), upcoming=_upcoming(conn, hours=48, limit=8, channels=ids),
         )
 
 
@@ -131,9 +138,10 @@ def channel_page(request: Request, channel_id: int, days: int = 28, notice: str 
 
 
 @app.get("/schedule")
-def schedule_page(request: Request, channel: int = 0):
+def schedule_page(request: Request):
     with db.session() as conn:
-        upcoming = _upcoming(conn, hours=24 * 14, limit=5000, channel_id=channel or None)
+        sc = scope.resolve(conn, request.query_params, request.cookies)
+        upcoming = _upcoming(conn, hours=24 * 14, limit=5000, channels=sc["ids"])
         day_totals = {}
         for item in upcoming:
             day_totals[item["publish_at"][:10]] = day_totals.get(item["publish_at"][:10], 0) + 1
@@ -142,8 +150,7 @@ def schedule_page(request: Request, channel: int = 0):
         for item in items:
             groups.setdefault(item["publish_at"][:10], []).append(item)
         return page(
-            request, "schedule.html", groups=groups, day_totals=day_totals, items=items, channel_filter=channel,
-            channels=[dict(r) for r in conn.execute("SELECT id, name FROM channels ORDER BY name")],
+            request, "schedule.html", groups=groups, day_totals=day_totals, items=items, scope=sc,
             quota=analytics.quota_today(conn),
         )
 
@@ -272,16 +279,18 @@ async def audio_upload(request: Request, niche: str, files: List[UploadFile] = F
 def analytics_page(request: Request, days: int = 28):
     days = days_param(days)
     with db.session() as conn:
+        sc = scope.resolve(conn, request.query_params, request.cookies)
+        ids = sc["ids"]
         return page(
-            request, "analytics.html", days=days,
-            kpis=analytics.kpis(conn, days),
-            views=analytics.daily_series(conn, days),
-            watch=analytics.daily_series(conn, days, metric="watch_hours"),
-            subs=analytics.daily_series(conn, days, metric="net_subs"),
-            by_niche=analytics.views_by_niche(conn, days),
-            channels=analytics.channel_rows(conn, days),
-            top=analytics.top_videos(conn, days, limit=15),
-            heatmap=analytics.timing_heatmap(conn, days),
+            request, "analytics.html", days=days, scope=sc,
+            kpis=analytics.kpis(conn, days, ids),
+            views=analytics.daily_series(conn, days, ids),
+            watch=analytics.daily_series(conn, days, ids, metric="watch_hours"),
+            subs=analytics.daily_series(conn, days, ids, metric="net_subs"),
+            by_niche=analytics.views_by_niche(conn, days, ids),
+            channels=analytics.channel_rows(conn, days, ids),
+            top=analytics.top_videos(conn, days, ids, limit=15),
+            heatmap=analytics.timing_heatmap(conn, days, ids),
         )
 
 
@@ -299,7 +308,8 @@ def audio_file(audio_id: int):
 @app.get("/media")
 def media_page(request: Request, niche: str = "", status: str = ""):
     with db.session() as conn:
-        return page(request, "media.html", **_media_ctx(conn, niche, status, request.query_params))
+        sc = scope.resolve(conn, request.query_params, request.cookies)
+        return page(request, "media.html", **_media_ctx(conn, niche, status, request.query_params, sc["ids"]), scope=sc)
 
 
 @app.get("/media/video/{video_id}")
@@ -527,14 +537,14 @@ def _settings_ctx(conn, request: Request):
 
 # ---------- shared queries ----------
 
-def _upcoming(conn, hours: int, limit: int = 500, channel_id: int = None):
+def _upcoming(conn, hours: int, limit: int = 500, channels=None):
     now = timeutil.now_local()
     end = now + dt.timedelta(hours=hours)
     where = "v.status IN ('ready','rendering','rendered','scheduled','failed') AND v.publish_at > ? AND v.publish_at <= ?"
     args = [timeutil.fmt(now), timeutil.fmt(end)]
-    if channel_id:
-        where += " AND v.channel_id = ?"
-        args.append(channel_id)
+    frag, ids = analytics._in("v.channel_id", channels)
+    where += frag
+    args += ids
     rows = conn.execute(
         f"SELECT v.id, v.title, v.status, v.publish_at, v.error, v.channel_id, v.content_json, v.is_mock, v.youtube_video_id, c.name channel_name, c.niche, u.filename source "
         f"FROM videos v JOIN channels c ON c.id = v.channel_id LEFT JOIN uploads u ON u.id = v.upload_id WHERE {where} ORDER BY v.publish_at LIMIT ?", args + [limit]).fetchall()
@@ -567,7 +577,7 @@ def _content_ctx(conn, niche: str, query=None):
 MEDIA_FILTERS = {"rendered": ("rendered",), "youtube": ("uploading", "scheduled", "published")}
 
 
-def _media_ctx(conn, niche: str, status: str, query=None):
+def _media_ctx(conn, niche: str, status: str, query=None, channels=None):
     """Every rendered video file on this PC, newest first, with its size and shape."""
     rows = conn.execute(
         "SELECT v.id, v.title, v.status, v.publish_at, v.duration_s, v.video_path, v.youtube_video_id, v.channel_id, "
@@ -576,7 +586,7 @@ def _media_ctx(conn, niche: str, status: str, query=None):
     videos = []
     for r in rows:
         v = dict(r)
-        if not os.path.exists(v["video_path"]):
+        if not os.path.exists(v["video_path"]) or (channels is not None and v["channel_id"] not in channels):
             continue
         stat = os.stat(v["video_path"])
         v["size"] = stat.st_size

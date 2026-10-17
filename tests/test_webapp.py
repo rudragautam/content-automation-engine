@@ -86,7 +86,7 @@ class TestFreshHub(unittest.TestCase):
 
 class TestPages(HubTestCase):
     def test_every_page_renders(self):
-        for url in ["/", "/?days=7", "/?days=90", "/channels/1", "/schedule", "/schedule?channel=2",
+        for url in ["/", "/?days=7", "/?days=90", "/channels/1", "/schedule", "/schedule?ch=2", "/analytics?created=live", "/analytics?created=planned&ch=1",
                     "/content", "/content?niche=crime_files", "/media", "/media?niche=geeta_gyaan&status=rendered", "/audio", "/analytics?days=90"]:
             with self.subTest(url=url):
                 self.assertEqual(self.client.get(url).status_code, 200)
