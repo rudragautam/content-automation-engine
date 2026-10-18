@@ -15,7 +15,7 @@ from markupsafe import Markup
 
 from content_templates import NICHES, workbook_bytes
 from publishing.youtube import ABOUT_LIMIT as YT_ABOUT_LIMIT, YouTubeError
-from webapp import ai_drafts, analytics, channel_art, channel_audit, channel_names, channel_setup, db, metadata_apply, mock, optimizer, optimizer_checks, queue, scope, shell, themes, timeutil, youtube_sync
+from webapp import ai_drafts, analytics, channel_art, channel_audit, channel_names, channel_setup, db, home, metadata_apply, mock, optimizer, optimizer_checks, queue, scope, shell, themes, timeutil, youtube_sync
 from webapp.paging import paginate
 from webapp.queue import ActionError
 
@@ -86,7 +86,7 @@ def page(request: Request, name: str, **ctx):
     with db.session() as conn:
         ctx.setdefault("alert_count", len(analytics.alerts(conn)))
         ctx.setdefault("mock_count_global", conn.execute("SELECT COUNT(*) FROM channels WHERE is_mock = 1").fetchone()[0])
-        frame = shell.context(conn, request, active, ctx)
+        frame = shell.context(conn, request, name.split(".")[0], ctx)  # menus follow the template, not active_override
     response = templates.TemplateResponse(request, name, {"active": active, "ranges": RANGES, **frame, **ctx})
     if "scope" in ctx:
         scope.keep(ctx["scope"], response)
@@ -118,6 +118,7 @@ def dashboard(request: Request, days: int = 28):
             channels=rows, by_niche=analytics.views_by_niche(conn, days, ids),
             alerts=analytics.alerts(conn, ids), low_queue=analytics.low_queue(rows),
             quota=analytics.quota_today(conn), upcoming=_upcoming(conn, hours=48, limit=8, channels=ids),
+            **home.extras(conn, sc),
         )
 
 

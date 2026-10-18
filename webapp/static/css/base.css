@@ -2,7 +2,7 @@
 
 *, *::before, *::after { box-sizing: border-box; }
 html, body { margin: 0; min-height: 100%; }
-html { -webkit-text-size-adjust: 100%; }
+html { -webkit-text-size-adjust: 100%; overflow-x: clip; }
 body {
   font-family: var(--font); font-size: var(--fs-base); line-height: var(--lh); color: var(--text);
   background: linear-gradient(135deg, var(--bg1), var(--bg2)); background-attachment: fixed;
@@ -21,7 +21,7 @@ h1, h2, h3, h4 { margin: 0; line-height: 1.25; color: var(--text); }
 h1 { font-size: var(--fs-page); font-weight: 800; letter-spacing: -0.01em; }
 h2 { font-size: var(--fs-xl); font-weight: 700; }
 h3 { font-size: var(--fs-lg); font-weight: 700; }
-h4 { font-size: var(--fs-sm); font-weight: 700; text-transform: uppercase; letter-spacing: .04em; color: var(--muted); }
+h4 { font-size: var(--fs-sm); font-weight: 700; text-transform: uppercase; letter-spacing: .04em; color: var(--ink-muted); }
 p { margin: 0 0 var(--s2); }
 a { color: var(--link); text-decoration: none; font-weight: 600; }
 a:hover { text-decoration: underline; text-underline-offset: 3px; }
@@ -35,8 +35,8 @@ ul, ol { padding-left: 22px; }
 :focus-visible { outline: 3px solid var(--focus); outline-offset: 2px; border-radius: 8px; }
 ::selection { background: color-mix(in srgb, var(--coral) 40%, transparent); }
 
-.muted { color: var(--muted); }
-.secondary { color: var(--muted); }
+.muted { color: var(--ink-muted); }
+.secondary { color: var(--ink-muted); }
 .small { font-size: var(--fs-xs); }
 .num { font-variant-numeric: tabular-nums; }
 .nowrap { white-space: nowrap; }

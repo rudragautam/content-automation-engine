@@ -25,6 +25,7 @@
     </form>
   {% elif s.status == 'generating' %}
     <p class="secondary"><span class="chip accent spin"><span class="i"></span>Gemini is writing</span> One request for this video; this updates by itself in 10–30 seconds.</p>
+    <div class="skeleton-lines" aria-hidden="true"><div class="skeleton"></div><div class="skeleton"></div><div class="skeleton"></div></div>
   {% else %}
     {% set p = s.package %}
     {% set pv = s.preview %}
@@ -35,7 +36,7 @@
       <div><strong>✓ {{ 'Live on YouTube' if s.remote else 'Applied in the hub' }}</strong> <span class="muted small">since {{ s.applied_at | when }}</span></div>
       <div class="live-title">{{ s.current.title }}</div>
       {% if s.before %}<div class="muted small">Before: {{ s.before.title }}</div>{% endif %}
-      <form method="post" action="/suggestions/{{ s.id }}/undo" onsubmit="return confirm('{{ 'Put the previous title, description and tags back on YouTube?' if s.remote else 'Put back the title, description and tags from before Apply?' }}')">
+      <form method="post" action="/suggestions/{{ s.id }}/undo" data-confirm="{{ 'The previous title, description and tags go back on YouTube: ' ~ s.before.title if s.remote and s.before else 'The title, description and tags from before Apply come back.' }}" data-confirm-title="{{ 'Roll back on YouTube?' if s.remote else 'Undo this change?' }}" data-confirm-ok="{{ 'Roll back' if s.remote else 'Undo' }}">
         <button class="btn small" type="submit">↺ {{ 'Roll back on YouTube' if s.remote else 'Undo: restore the previous version' }}</button>
       </form>
     </div>
@@ -50,7 +51,7 @@
     {% endif %}
 
     {% if s.status == 'applied' %}<details class="edit-again"><summary>Change it again</summary>{% endif %}
-    <form method="post" action="/suggestions/{{ s.id }}/apply" class="suggest-form" data-suggest-form
+    <form method="post" action="/suggestions/{{ s.id }}/apply" class="suggest-form" data-suggest-form {% if s.remote %}data-remote{% endif %} data-before-title="{{ pv.before.title }}"
           data-footer="{{ pv.footer }}" data-default-tags="{{ pv.default_tags | join(', ') }}">
       <div class="step">
         <div class="step-head"><span class="step-n">1</span><strong>Pick a title</strong></div>
@@ -163,7 +164,7 @@
         <strong class="clip" title="{{ c.video_title }}">{{ c.video_title or c.youtube_video_id }}</strong>
         <span class="muted small">{{ c.created_at | when }} · {{ c.fields | map(attribute='field') | join(', ') }}</span>
         {% if c.can_rollback %}
-        <form method="post" action="/changes/{{ c.group }}/rollback" onsubmit="return confirm('Put the previous version back on YouTube?')">
+        <form method="post" action="/changes/{{ c.group }}/rollback" data-confirm="The previous title, description and tags go back on YouTube." data-confirm-title="Roll back this change?" data-confirm-ok="Roll back">
           <input type="hidden" name="back" value="{{ back }}">
           <button class="btn small" type="submit">Roll back</button>
         </form>

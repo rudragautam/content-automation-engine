@@ -1,45 +1,92 @@
 {% extends "base.html" %}
 {% from "_macros.html" import delta_short, connection, delta, range_filter, status, scope_filter %}
+{% from "_ui.html" import icon, stat, ring, empty_state, issue %}
 {% block title %}Dashboard{% endblock %}
+{% block page_title %}{{ scope.label if scope.active else 'All channels' }}{% endblock %}
+{% block page_desc %}{% if scope.channel %}Here’s how this channel is doing{% else %}{{ channels | length }} channel{{ '' if channels | length == 1 else 's' }} together{% endif %}, last {{ days }} days.{% endblock %}
+{% block page_actions %}{% if optimizer.mode == 'one' or (optimizer.mode == 'none' and optimizer.can_run) %}<a class="btn primary" href="/channels/{{ scope.channel.id }}#analysis">{{ icon('optimizer') }}Run analysis</a>{% endif %}{% endblock %}
 {% block content %}
-<div class="page-head">
-  <div>
-    <h1>{{ scope.label if scope.active else 'All channels' }}</h1>
-    <div class="sub">{{ channels | length }} channel{{ '' if channels | length == 1 else 's' }} · last {{ days }} days</div>
-  </div>
-  <div class="filters">{{ scope_filter(scope, {'days': days}) }}{{ range_filter(days, ranges, "/?") }}</div>
-</div>
+<div class="filters" style="margin-bottom:var(--s5)">{{ scope_filter(scope, {'days': days}) }}{{ range_filter(days, ranges, "/?") }}</div>
 
-<div class="tiles">
-  <div class="tile"><div class="label">Subscribers</div><div class="value">{{ kpis.subscribers | compact }}</div><div class="delta">{{ kpis.net_subs | signed }} net in {{ days }} days</div></div>
-  <div class="tile"><div class="label">Views</div><div class="value">{{ kpis.views | compact }}</div>{{ delta(kpis.views_delta, days) }}</div>
-  <div class="tile"><div class="label">Watch hours</div><div class="value">{{ kpis.watch_hours | compact }}</div>{{ delta(kpis.watch_delta, days) }}</div>
-  <div class="tile"><div class="label">Videos published</div><div class="value">{{ kpis.published | compact }}</div><div class="delta">in {{ days }} days</div></div>
-  <div class="tile">
-    <div class="label">YouTube API quota today</div>
-    <div class="value">{{ quota.pct }}%</div>
-    <div class="meter {{ 'danger' if quota.pct >= 90 else 'warn' if quota.pct >= 60 }}" role="meter" aria-valuenow="{{ quota.used }}" aria-valuemax="{{ quota.limit }}" aria-label="Quota used"><span style="width:{{ [quota.pct, 100] | min }}%"></span></div>
-    <div class="delta">about {{ quota.uploads_left }} more uploads today</div>
+<section class="tiles" aria-label="Last {{ days }} days">
+  {% call stat('Views, last ' ~ days ~ ' days', kpis.views | compact, 'views') %}{{ delta(kpis.views_delta, days) }}{% endcall %}
+  {% call stat('Subscribers', kpis.subscribers | compact, 'users') %}<span class="delta">{{ kpis.net_subs | signed }} net in {{ days }} days</span>{% endcall %}
+  {% call stat('Watch hours', kpis.watch_hours | compact, 'clock') %}{{ delta(kpis.watch_delta, days) }}{% endcall %}
+  {% call stat('Videos published', kpis.published | compact, 'upload') %}<span class="delta">in {{ days }} days</span>{% endcall %}
+  {% call stat('YouTube API quota today', quota.pct ~ '%', 'gauge', 'Each upload uses about 1,600 of the 10,000 daily units, shared by all channels.') %}
+    <div class="meter {{ 'danger' if quota.pct >= 90 else 'warn' if quota.pct >= 60 }}" role="meter" aria-valuenow="{{ quota.used }}" aria-valuemin="0" aria-valuemax="{{ quota.limit }}" aria-label="Quota used"><span style="width:{{ [quota.pct, 100] | min }}%"></span></div>
+    <span class="muted small">about {{ quota.uploads_left }} more uploads today</span>
+  {% endcall %}
+</section>
+
+<section class="two">
+  <div class="card" id="optimizer">
+    <h2>AI Optimizer</h2>
+    <p class="card-sub" style="margin-top:4px">What is holding views back, in order of impact.</p>
+    {% if optimizer.mode == 'one' %}
+      <div class="score">
+        {{ ring(optimizer.audit.score, 'Channel score') }}
+        <div style="flex:1;min-width:200px">
+          <p class="headline">{{ optimizer.headline }}</p>
+          <p class="muted">Last analysis {{ optimizer.audit.finished_at | when }}.</p>
+        </div>
+      </div>
+      <div style="margin-top:var(--s4)">
+        {% for f in optimizer.problems %}{{ issue(f.severity, f.title, f.detail) }}{% endfor %}
+        {% for f in optimizer.good %}{{ issue('info', f.title, f.detail) }}{% endfor %}
+      </div>
+      <a class="btn" href="/channels/{{ optimizer.channel.id }}/analysis/{{ optimizer.audit.id }}">Open the report and suggestions</a>
+    {% elif optimizer.mode == 'none' %}
+      {{ empty_state('No analysis yet', 'Run one to see why videos get few views and what to change. Nothing changes on YouTube until you approve it.',
+                     '/channels/' ~ optimizer.channel.id ~ '#analysis' if optimizer.can_run else none, 'Run analysis' if optimizer.can_run else none, 'optimizer') }}
+    {% elif optimizer.channels %}
+      <div class="stack">
+        {% for c in optimizer.channels %}
+        <a class="row" href="/channels/{{ c.id }}/analysis/{{ c.audit_id }}" style="text-decoration:none;color:inherit">
+          {{ ring(c.score, '', 'sm') }}
+          <span class="t"><b>{{ c.name }}</b><span>Analysed {{ c.finished_at | when }}</span></span>
+          <span class="btn small">Open</span>
+        </a>
+        {% endfor %}
+      </div>
+    {% else %}
+      {{ empty_state('Pick a channel', 'Choose a channel in the Channels menu, then run an analysis from its page.', none, none, 'optimizer') }}
+    {% endif %}
   </div>
-</div>
+
+  <div class="card">
+    <h2>Drafts ready to improve</h2>
+    <p class="card-sub" style="margin-top:4px">Get a better title, description and tags before you publish.</p>
+    {% for d in improve %}
+    <div class="row">
+      <div class="thumb" aria-hidden="true"></div>
+      <div class="t"><b>{{ d.title }}</b><span>{{ d.sub }}</span></div>
+      <a class="btn small" href="{{ d.href }}">Improve</a>
+    </div>
+    {% else %}
+    {{ empty_state('Nothing waiting', 'Write new videos with Gemini, then improve them here before they go out.', '/content#generate', 'Write videos', 'drafts') }}
+    {% endfor %}
+    <p class="note">Nothing is changed on YouTube until you approve it.</p>
+  </div>
+</section>
 
 <div class="grid cols-3">
   <section class="card span-2">
-    <div class="card-head"><h2>Daily views, {{ scope.label if scope.active else 'all channels' }}</h2><span class="muted">last {{ days }} days</span></div>
+    <div class="card-head"><h2>Daily views</h2><span class="muted">{{ scope.label if scope.active else 'all channels' }} · last {{ days }} days</span></div>
     <div class="chart" data-chart="line" data-src="series-data" data-label="Daily views, {{ scope.label if scope.active else 'all channels' }}"></div>
     <script type="application/json" id="series-data">{{ series | tojson_safe }}</script>
   </section>
   <section class="card">
-    <div class="card-head"><h2>Needs attention</h2><span class="muted">{{ alerts | length + (1 if low_queue else 0) }}</span></div>
+    <div class="card-head"><h2>Needs attention</h2>{% if alerts or low_queue %}<span class="badge">{{ alerts | length + (1 if low_queue else 0) }}</span>{% endif %}</div>
     <div class="alerts">
       {% for a in alerts %}
-      <div class="alert {{ a.level }}"><span class="i">{{ '!' if a.level == 'critical' else '–' }}</span><span>{{ a.text }}</span><a href="{{ a.href }}">Open</a></div>
+      <div class="alert {{ a.level }}"><span class="i" aria-hidden="true"></span><span>{{ a.text }}</span><a href="{{ a.href }}">Open</a></div>
       {% endfor %}
       {% if low_queue %}
-      <div class="alert warning"><span class="i">–</span><span>{{ low_queue | length }} channel{{ ' has' if low_queue | length == 1 else 's have' }} under 3 days of videos queued:
-        {% for c in low_queue %}<a href="/channels/{{ c.id }}" style="margin:0;font-weight:500">{{ c.name }}</a> ({{ c.covered_days }}d){{ ', ' if not loop.last }}{% endfor %}.</span><a href="/content">Add</a></div>
+      <div class="alert warning"><span class="i" aria-hidden="true"></span><span>{{ low_queue | length }} channel{{ ' has' if low_queue | length == 1 else 's have' }} under 3 days of videos queued:
+        {% for c in low_queue %}<a href="/channels/{{ c.id }}">{{ c.name }}</a> ({{ c.covered_days }}d){{ ', ' if not loop.last }}{% endfor %}.</span><a href="/content">Add</a></div>
       {% endif %}
-      {% if not alerts and not low_queue %}<div class="empty">Nothing needs attention.</div>{% endif %}
+      {% if not alerts and not low_queue %}{{ empty_state('All good', 'Nothing needs your attention right now.', none, none, 'check') }}{% endif %}
     </div>
   </section>
 </div>
@@ -82,10 +129,10 @@
     {% if upcoming %}
     <div class="table-wrap"><table><tbody>
       {% for v in upcoming %}
-      <tr><td class="num" style="white-space:nowrap">{{ v.publish_at | when }}</td><td><div class="cell-title clip" title="{{ v.title }}">{{ v.title }}</div><div class="cell-sub"><a href="/channels/{{ v.channel_id }}">{{ v.channel_name }}</a></div></td><td>{{ status(v.status) }}</td></tr>
+      <tr><td class="num nowrap">{{ v.publish_at | when }}</td><td><div class="cell-title clip" title="{{ v.title }}">{{ v.title }}</div><div class="cell-sub"><a href="/channels/{{ v.channel_id }}">{{ v.channel_name }}</a></div></td><td>{{ status(v.status) }}</td></tr>
       {% endfor %}
     </tbody></table></div>
-    {% else %}<div class="empty">Nothing scheduled in the next 48 hours.</div>{% endif %}
+    {% else %}{{ empty_state('Nothing in the next 48 hours', 'Queue content and it shows up here.', '/content', 'Add content', 'schedule') }}{% endif %}
   </section>
 </div>
 {% endblock %}

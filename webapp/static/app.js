@@ -193,6 +193,29 @@ document.querySelectorAll("[data-suggest-form]").forEach((form) => {
   [title, description, tags].forEach((el) => el.addEventListener("input", update));
   form.querySelector("[data-approve]").addEventListener("change", update);
   update();
+  // Apply asks once more, showing exactly what changes.
+  form.addEventListener("submit", async (e) => {
+    if (form.dataset.confirmed) return;
+    e.preventDefault();
+    const box = document.createElement("div");
+    box.className = "modal-change";
+    const line = (cls, text) => { const p = document.createElement("p"); p.className = cls; p.textContent = text; box.append(p); };
+    const before = form.dataset.beforeTitle || "";
+    const after = title.value.split(/\s+/).join(" ").trim();
+    if (before && before !== after) line("was", before);
+    line("now", after);
+    const note = document.createElement("p");
+    note.className = "muted";
+    note.textContent = "remote" in form.dataset
+      ? "The description and tags are replaced too. Privacy and Made for Kids stay as they are; the old version is backed up and Roll back restores it."
+      : "The description and tags are replaced too, in the hub. They go to YouTube with the upload; Undo restores the old version.";
+    box.append(note);
+    const yes = await confirmDialog({ title: "remote" in form.dataset ? "Change this video on YouTube?" : "Apply this change?", html: box,
+      ok: "remote" in form.dataset ? "Apply to YouTube" : "Apply" });
+    if (!yes) return;
+    form.dataset.confirmed = "1";
+    form.submit();
+  });
 });
 
 // Analysis report: a link to one video (#s-12) opens its row; filter chips show one kind of video.

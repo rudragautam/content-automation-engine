@@ -81,11 +81,16 @@
 
 :root {
   /* actions: one primary gradient per palette */
-  --primary-1: var(--btn1, var(--coral));
-  --primary-2: var(--btn2, var(--coral2));
+  /* Sunset has no button colours of its own in the preview; these keep white text at 4.5:1 or more */
+  --primary-1: var(--btn1, #c93a50);
+  --primary-2: var(--btn2, #c25425);
   --primary: linear-gradient(135deg, var(--primary-1), var(--primary-2));
   --primary-glow: 0 10px 24px color-mix(in srgb, var(--primary-1) 45%, transparent);
-  --link: var(--coral);
+  /* text roles: the palette colours mixed toward the text colour until they pass WCAG AA on glass */
+  --ink-muted: color-mix(in srgb, var(--text) 35%, var(--muted));
+  --link: color-mix(in srgb, var(--text) 45%, var(--coral));
+  /* dark cards sit on a little of the darkest background colour, so text stays readable over bright blobs */
+  --card-bg: linear-gradient(var(--glass), var(--glass)), color-mix(in srgb, var(--bg1) 45%, transparent);
   /* status */
   --success: var(--teal);
   --warning: var(--amber);
@@ -112,8 +117,10 @@
   --fast: .15s; --med: .2s; --slow: .3s;
   --highlight: inset 0 1px 0 rgba(255,255,255,.18);
 }
-:root[data-theme="light"] { --tint: rgba(255,255,255,.55); --inset: rgba(255,255,255,.6); --highlight: inset 0 1px 0 rgba(255,255,255,.9); }
-@media (prefers-color-scheme: light) { :root:not([data-theme="dark"]) { --tint: rgba(255,255,255,.55); --inset: rgba(255,255,255,.6); --highlight: inset 0 1px 0 rgba(255,255,255,.9); } }
+:root[data-theme="light"] { --tint: rgba(255,255,255,.55); --inset: rgba(255,255,255,.6); --highlight: inset 0 1px 0 rgba(255,255,255,.9); --ink-muted: var(--muted); --link: color-mix(in srgb, var(--text) 30%, var(--coral)); --card-bg: var(--glass); }
+@media (prefers-color-scheme: light) { :root:not([data-theme="dark"]) { --tint: rgba(255,255,255,.55); --inset: rgba(255,255,255,.6); --highlight: inset 0 1px 0 rgba(255,255,255,.9); --ink-muted: var(--muted); --link: color-mix(in srgb, var(--text) 30%, var(--coral)); --card-bg: var(--glass); } }
+/* Midnight's second button colour, a touch deeper so white text passes 4.5:1 */
+:root[data-palette="midnight"] { --primary-2: #0874b0; }
 
 /* the palette's background eases into a new channel's palette */
 :root { transition: --bg1 var(--slow) ease, --bg2 var(--slow) ease; }
