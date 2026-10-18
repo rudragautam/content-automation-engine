@@ -269,15 +269,13 @@ def upload_now(video_id: int, services=None) -> None:
         try:
             v = conn.execute("SELECT v.*, c.niche, c.timezone FROM videos v JOIN channels c ON c.id = v.channel_id WHERE v.id = ?", (video_id,)).fetchone()
             youtube, _ = services or _services(conn, v["channel_id"])
-            from webapp import channel_setup
+            from webapp import channel_setup, metadata_apply
 
             prefs = channel_setup.defaults(conn, v["channel_id"])
-            footer = prefs["description_footer"]
-            description = "\n\n".join(part for part in (v["description"], footer) if part)
-            own_tags = [t.strip() for t in v["tags"].split(",") if t.strip()]
-            tags = own_tags + [t for t in prefs["default_tags"] if t.lower() not in {o.lower() for o in own_tags}]
+            # The same assembly the Suggestions preview checks against YouTube's limits.
+            meta = metadata_apply.upload_metadata(prefs, v["title"], v["description"], metadata_apply.parse_tags(v["tags"]))
             body = yt.upload_body(
-                v["title"], description, tags,
+                meta["title"], meta["description"], meta["tags"],
                 yt.to_utc_rfc3339(v["publish_at"], v["timezone"]) if v["publish_at"] else None,
                 category_id=prefs["category_id"], language=prefs["language"],
                 made_for_kids=prefs["made_for_kids"], synthetic_media=prefs["synthetic_media"],

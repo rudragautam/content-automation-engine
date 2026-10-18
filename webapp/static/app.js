@@ -144,6 +144,61 @@ if (draftBox) {
   setTimeout(check, 3000);
 }
 
+// AI Optimizer: reload once Gemini's suggestions are written.
+document.querySelectorAll("[data-suggest-poll]").forEach((box) => {
+  const check = async () => {
+    const res = await fetch(`/api/suggestions/${box.dataset.suggestPoll}`).then((r) => r.json()).catch(() => ({}));
+    if (res.status === "generating" || !res.status) return setTimeout(check, 3000);
+    location.reload();
+  };
+  setTimeout(check, 3000);
+});
+
+// Suggestions form: pick a title, and keep the "After" preview and YouTube's limits in step with edits.
+// Counted the way the upload sends it: the channel's footer and default tags are added (webapp/metadata_apply.py).
+const LIMITS = { title: 100, description: 5000, tags: 500 };
+const bytes = (s) => new TextEncoder().encode(s).length;
+const tagsLength = (tags) => tags.reduce((n, t) => n + t.length + (t.includes(" ") ? 2 : 0), 0) + Math.max(tags.length - 1, 0);
+const parseTags = (text) => {
+  const seen = new Set();
+  return text.replace(/\n/g, ",").split(",").map((t) => t.trim()).filter((t) => t && !seen.has(t.toLowerCase()) && seen.add(t.toLowerCase()));
+};
+document.querySelectorAll("[data-suggest-form]").forEach((form) => {
+  const title = form.elements.title, description = form.elements.description, tags = form.elements.tags;
+  const footer = form.dataset.footer || "";
+  const defaults = parseTags(form.dataset.defaultTags || "");
+  const out = (k) => form.querySelector(`[data-after=${k}]`);
+  const count = (k) => form.querySelector(`[data-count=${k}]`);
+  const problems = form.querySelector("[data-limit-problems]");
+  const update = () => {
+    const t = title.value.split(/\s+/).join(" ").trim();
+    const desc = [description.value.trim(), footer].filter(Boolean).join("\n\n");
+    const own = parseTags(tags.value);
+    const lower = new Set(own.map((x) => x.toLowerCase()));
+    const allTags = own.concat(defaults.filter((d) => !lower.has(d.toLowerCase())));
+    const sizes = { title: t.length, description: bytes(desc), tags: tagsLength(allTags) };
+    out("title").textContent = t || "—";
+    out("description").textContent = desc || "(no description)";
+    out("tags").textContent = allTags.join(", ") || "(no tags)";
+    const bad = [];
+    for (const k of Object.keys(LIMITS)) {
+      const unit = k === "description" ? "bytes" : "characters";
+      count(k).textContent = `${sizes[k]}/${LIMITS[k]} ${unit}`;
+      const over = sizes[k] > LIMITS[k];
+      count(k).classList.toggle("over", over);
+      if (over) bad.push(`The ${k} is ${sizes[k]} ${unit}; YouTube allows ${LIMITS[k]}.`);
+    }
+    if (!t) bad.push("The title is empty.");
+    problems.hidden = !bad.length;
+    problems.textContent = bad.join(" ");
+    form.querySelector("[data-apply]").disabled = bad.length > 0;
+    form.querySelectorAll("[data-title-option]").forEach((b) => b.classList.toggle("on", b.dataset.titleOption === t));
+  };
+  form.querySelectorAll("[data-title-option]").forEach((b) => b.addEventListener("click", () => { title.value = b.dataset.titleOption; update(); }));
+  [title, description, tags].forEach((el) => el.addEventListener("input", update));
+  update();
+});
+
 mountAll();
 
 // Channel setup opens in its own window, reused if it's already open for that channel.

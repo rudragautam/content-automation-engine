@@ -366,3 +366,37 @@ details[open] > .summary-head h2::before { content: "▾ "; }
 code { overflow-wrap: anywhere; }
 .grid > * { min-width: 0; }  /* a long select (e.g. a model name) must not widen its column */
 .form-row > .field { max-width: 100%; }
+
+/* AI Optimizer: Suggestions panel */
+.suggest { margin-top: 14px; padding-top: 14px; border-top: 1px solid var(--border); display: grid; gap: 10px; }
+.suggest-head { display: flex; flex-wrap: wrap; align-items: center; gap: 10px; }
+.suggest-head h3 { margin: 0; }
+.suggest p { margin: 0; }
+.suggest .small, .muted.small { font-size: 12px; }
+.suggest-meta { font-size: 12.5px; }
+.suggest-why ul { margin: 4px 0 0; padding-left: 18px; color: var(--ink-2); }
+.suggest-form { display: grid; gap: 10px; }
+.suggest-form input[type="text"], .suggest-form textarea { width: 100%; box-sizing: border-box; }
+.suggest-form .count { font-weight: 400; color: var(--muted); }
+.suggest-form .count.over { color: var(--critical-ink); font-weight: 700; }
+.title-options { border: 0; padding: 0; margin: 0; display: grid; gap: 6px; }
+.title-options legend { font-weight: 600; font-size: 12.5px; color: var(--ink-2); padding: 0; margin-bottom: 4px; }
+.title-option { text-align: left; font: inherit; color: var(--ink); background: var(--surface); border: 1px solid var(--border); border-radius: 8px; padding: 8px 10px; cursor: pointer; overflow-wrap: anywhere; }
+.title-option:hover { background: var(--surface-2); }
+.title-option.on { border-color: var(--accent); background: var(--accent-wash); }
+.before-after { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 12px; }
+.before-after > div { border: 1px solid var(--border); border-radius: 8px; padding: 10px 12px; background: var(--surface-2); min-width: 0; display: grid; gap: 6px; align-content: start; }
+.before-after h4, .shorts-advice h4 { margin: 0; font-size: 12px; text-transform: uppercase; letter-spacing: 0.04em; color: var(--muted); }
+.ba-title { font-weight: 600; overflow-wrap: anywhere; }
+.ba-text { margin: 0; font: inherit; font-size: 13px; white-space: pre-wrap; overflow-wrap: anywhere; max-height: 220px; overflow-y: auto; }
+.ba-tags { font-size: 12.5px; color: var(--ink-2); overflow-wrap: anywhere; }
+.approve { display: flex; gap: 8px; align-items: flex-start; font-size: 13px; }
+.approve input { margin-top: 3px; }
+.undo-form, .regen { display: flex; flex-wrap: wrap; align-items: center; gap: 10px; margin: 0; }
+.shorts-advice { border: 1px dashed var(--border); border-radius: 8px; padding: 10px 12px; display: grid; gap: 6px; }
+.shorts-advice .kv dd { overflow-wrap: anywhere; }
+@media (max-width: 640px) {
+  .before-after { grid-template-columns: minmax(0, 1fr); }
+  .shorts-advice .kv { grid-template-columns: minmax(0, 1fr); gap: 2px; }
+  .shorts-advice .kv dd { margin-bottom: 6px; }
+}

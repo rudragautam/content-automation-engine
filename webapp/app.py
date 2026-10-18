@@ -15,7 +15,7 @@ from markupsafe import Markup
 
 from content_templates import NICHES, workbook_bytes
 from publishing.youtube import ABOUT_LIMIT as YT_ABOUT_LIMIT, YouTubeError
-from webapp import ai_drafts, analytics, channel_art, channel_names, channel_setup, db, mock, queue, scope, timeutil, youtube_sync
+from webapp import ai_drafts, analytics, channel_art, channel_names, channel_setup, db, metadata_apply, mock, optimizer, queue, scope, timeutil, youtube_sync
 from webapp.paging import paginate
 from webapp.queue import ActionError
 
@@ -34,6 +34,7 @@ async def lifespan(_app):
         conn.execute("UPDATE videos SET status = 'failed', error = 'Render interrupted by a restart; render again.' WHERE status = 'rendering'")
         conn.execute("UPDATE videos SET status = 'rendered', error = 'Upload interrupted by a restart; upload again.' WHERE status = 'uploading'")
         conn.execute("UPDATE drafts SET status = 'failed', error = 'Generation interrupted by a restart; generate again.' WHERE status = 'generating'")
+        conn.execute("UPDATE video_suggestions SET status = 'failed', error = 'Interrupted by a restart; ask for suggestions again.' WHERE status = 'generating'")
     yield
 
 
@@ -318,13 +319,14 @@ def content_generate(niche: str, channel_id: int = Form(...), topic: str = Form(
 
 
 @app.get("/drafts/{draft_id}")
-def draft_page(request: Request, draft_id: int, problem: str = ""):
+def draft_page(request: Request, draft_id: int, problem: str = "", notice: str = ""):
     with db.session() as conn:
         try:
             draft = ai_drafts.load(conn, draft_id)
         except ActionError:
             return Response("Draft not found", status_code=404)
-        return page(request, "draft.html", draft=draft, spec=NICHES[draft["niche"]], problem=problem, active_override="content")
+        return page(request, "draft.html", draft=draft, spec=NICHES[draft["niche"]], problem=problem, notice=notice,
+                    suggestions=optimizer.for_draft(conn, draft_id), active_override="content")
 
 
 @app.get("/api/drafts/{draft_id}")
@@ -362,6 +364,88 @@ def draft_discard(draft_id: int):
         row = conn.execute("SELECT niche FROM drafts WHERE id = ?", (draft_id,)).fetchone()
         ai_drafts.discard(conn, draft_id)
     return RedirectResponse(f"/content?niche={row[0] if row else ''}", status_code=303)
+
+
+# ---------- AI Optimizer: suggestions before upload ----------
+
+def _suggestion_back(s, notice: str = "", problem: str = "") -> RedirectResponse:
+    query = "&".join(f"{k}={_q(v)}" for k, v in (("notice", notice), ("problem", problem)) if v)
+    if s["draft_id"]:
+        url = f"/drafts/{s['draft_id']}" + (f"?{query}" if query else "") + f"#row-{s['draft_row']}"
+    else:
+        url = f"/videos/{s['video_id']}/suggestions" + (f"?{query}" if query else "")
+    return RedirectResponse(url, status_code=303)
+
+
+@app.post("/drafts/{draft_id}/suggest")
+def draft_suggest(draft_id: int, row: int = Form(0)):
+    try:
+        with db.session() as conn:
+            optimizer.start_for_draft(conn, draft_id, row or None)
+        return RedirectResponse(f"/drafts/{draft_id}" + (f"#row-{row}" if row else ""), status_code=303)
+    except ActionError as e:
+        return RedirectResponse(f"/drafts/{draft_id}?problem={_q(e)}" + (f"#row-{row}" if row else ""), status_code=303)
+
+
+@app.get("/videos/{video_id}/suggestions")
+def video_suggestions_page(request: Request, video_id: int, notice: str = "", problem: str = ""):
+    with db.session() as conn:
+        v = conn.execute("SELECT v.*, c.name channel_name FROM videos v JOIN channels c ON c.id = v.channel_id WHERE v.id = ?", (video_id,)).fetchone()
+        if not v:
+            return Response("Video not found", status_code=404)
+        return page(request, "suggestions.html", video=dict(v), suggestion=optimizer.for_video(conn, video_id),
+                    local=not v["youtube_video_id"] and v["status"] in metadata_apply.LOCAL_STATUSES,
+                    notice=notice, problem=problem, active_override="channel")
+
+
+@app.post("/videos/{video_id}/suggest")
+def video_suggest(video_id: int):
+    try:
+        with db.session() as conn:
+            optimizer.start_for_video(conn, video_id)
+        return RedirectResponse(f"/videos/{video_id}/suggestions", status_code=303)
+    except ActionError as e:
+        return RedirectResponse(f"/videos/{video_id}/suggestions?problem={_q(e)}", status_code=303)
+
+
+@app.get("/api/suggestions/{suggestion_id}")
+def suggestion_status(suggestion_id: int):
+    with db.session() as conn:
+        row = conn.execute("SELECT status, error FROM video_suggestions WHERE id = ?", (suggestion_id,)).fetchone()
+    return dict(row) if row else error("Suggestion not found.", 404)
+
+
+@app.post("/suggestions/{suggestion_id}/apply")
+def suggestion_apply(suggestion_id: int, title: str = Form(""), description: str = Form(""), tags: str = Form(""), approve: str = Form("")):
+    with db.session() as conn:
+        try:
+            s = optimizer.get(conn, suggestion_id)
+        except ActionError:
+            return Response("Suggestion not found", status_code=404)
+        if approve != "yes":
+            return _suggestion_back(s, problem="Tick the box to approve the change first.")
+        try:
+            check = metadata_apply.apply(conn, s, title, description, tags)
+        except ActionError as e:
+            conn.rollback()
+            return _suggestion_back(s, problem=str(e))
+    changed = ", ".join(check["changed"])
+    return _suggestion_back(s, notice=f"Applied the new {changed}. It goes to YouTube with the upload; Undo puts the old one back.")
+
+
+@app.post("/suggestions/{suggestion_id}/undo")
+def suggestion_undo(suggestion_id: int):
+    with db.session() as conn:
+        try:
+            s = optimizer.get(conn, suggestion_id)
+        except ActionError:
+            return Response("Suggestion not found", status_code=404)
+        try:
+            metadata_apply.undo(conn, s)
+        except ActionError as e:
+            conn.rollback()
+            return _suggestion_back(s, problem=str(e))
+    return _suggestion_back(s, notice="Undone: the previous title, description and tags are back.")
 
 
 @app.post("/content/{niche}/upload")

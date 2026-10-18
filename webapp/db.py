@@ -100,6 +100,27 @@ CREATE TABLE IF NOT EXISTS drafts (
     error TEXT,
     created_at TEXT NOT NULL
 );
+CREATE TABLE IF NOT EXISTS video_suggestions (
+    id INTEGER PRIMARY KEY,
+    channel_id INTEGER NOT NULL REFERENCES channels(id) ON DELETE CASCADE,
+    video_id INTEGER REFERENCES videos(id) ON DELETE CASCADE,    -- a hub video, or
+    draft_id INTEGER REFERENCES drafts(id) ON DELETE CASCADE,    -- one row of a Gemini draft
+    draft_row INTEGER,                 -- 1-based row in drafts.rows_json
+    model TEXT NOT NULL,
+    status TEXT NOT NULL,              -- generating | ready | failed | applied
+    language TEXT NOT NULL,
+    made_for_kids INTEGER NOT NULL DEFAULT 0,
+    is_short INTEGER NOT NULL DEFAULT 0,
+    package_json TEXT,                 -- what Gemini suggested, after the hub's checks
+    warnings_json TEXT,
+    before_json TEXT,                  -- title, description and tags before Apply, for Undo
+    applied_json TEXT,
+    error TEXT,
+    created_at TEXT NOT NULL,
+    applied_at TEXT
+);
+CREATE INDEX IF NOT EXISTS video_suggestions_video ON video_suggestions(video_id);
+CREATE INDEX IF NOT EXISTS video_suggestions_draft ON video_suggestions(draft_id, draft_row);
 CREATE TABLE IF NOT EXISTS settings (
     key TEXT PRIMARY KEY,
     value TEXT NOT NULL

@@ -1,4 +1,5 @@
 {% extends "base.html" %}
+{% from "_suggest.html" import panel %}
 {% block title %}Gemini draft{% endblock %}
 {% block content %}
 <div class="page-head">
@@ -9,12 +10,14 @@
   </div>
   {% if draft.status == 'ready' %}
   <div class="actions">
+    <form method="post" action="/drafts/{{ draft.id }}/suggest"><button class="btn" type="submit" title="One Gemini request per video">Suggestions for all {{ draft['items'] | length }}</button></form>
     <a class="btn" href="/drafts/{{ draft.id }}/excel">Download as Excel</a>
     <form method="post" action="/drafts/{{ draft.id }}/discard" onsubmit="return confirm('Discard this draft?')"><button class="btn danger" type="submit">Discard</button></form>
     <form method="post" action="/drafts/{{ draft.id }}/queue"><button class="btn primary" type="submit" {{ 'disabled' if not draft.valid_count }}>Add {{ draft.valid_count }} video{{ '' if draft.valid_count == 1 else 's' }} to {{ draft.channel_name }}</button></form>
   </div>
   {% endif %}
 </div>
+{% if notice %}<div class="notice ok">{{ notice }}</div>{% endif %}
 {% if problem %}<div class="notice bad">{{ problem }}</div>{% endif %}
 
 {% if draft.status == 'generating' %}
@@ -33,7 +36,7 @@
   {% endif %}
   {% for item in draft['items'] %}
   {% set r = item.row %}
-  <section class="card section">
+  <section class="card section" id="row-{{ loop.index }}">
     <div class="card-head">
       <h2>{{ loop.index }}. {{ r.youtube_title or 'Untitled' }}</h2>
       {% if item.ok %}<span class="chip good"><span class="i">✓</span>Passes checks</span>{% else %}<span class="chip critical"><span class="i">✕</span>Needs fixing</span>{% endif %}
@@ -55,6 +58,7 @@
       {% endfor %}
       </tbody>
     </table></div>
+    {% if draft.status == 'ready' or suggestions.get(loop.index) %}{{ panel(suggestions.get(loop.index), '/drafts/' ~ draft.id ~ '/suggest', loop.index) }}{% endif %}
   </section>
   {% endfor %}
 {% endif %}

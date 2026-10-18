@@ -1,0 +1,103 @@
+{# The AI Optimizer's Suggestions panel for one video: ask, wait, review before/after, approve, undo. #}
+{% macro panel(s, suggest_url, row=none) -%}
+<div class="suggest" {% if s and s.status == 'generating' %}data-suggest-poll="{{ s.id }}"{% endif %}>
+  <div class="suggest-head">
+    <h3>Suggestions</h3>
+    {% if s and s.status == 'generating' %}<span class="chip accent spin"><span class="i"></span>Gemini is writing</span>
+    {% elif s and s.status == 'applied' %}<span class="chip good"><span class="i">✓</span>Applied {{ s.applied_at | when }}</span>
+    {% elif s and s.status == 'ready' %}<span class="chip accent"><span class="i">★</span>Ready to review</span>
+    {% elif s and s.status == 'failed' %}<span class="chip critical"><span class="i">✕</span>Failed</span>{% endif %}
+  </div>
+
+  {% if s and s.blocked %}
+    <p class="muted">{{ s.blocked }}</p>
+  {% elif not s or s.status == 'failed' %}
+    {% if s %}<div class="notice bad">{{ s.error }}</div>{% endif %}
+    <p class="secondary">Gemini suggests a title, description, tags and, for Shorts, a hook, that follow this channel's language and its Made for Kids setting. Nothing changes until you approve it.</p>
+    <form method="post" action="{{ suggest_url }}">
+      {% if row %}<input type="hidden" name="row" value="{{ row }}">{% endif %}
+      <button class="btn primary" type="submit">{{ 'Try again' if s else 'Suggest with Gemini' }}</button>
+    </form>
+  {% elif s.status == 'generating' %}
+    <p class="secondary">One Gemini request for this video. This updates by itself, usually within 10–30 seconds.</p>
+  {% else %}
+    {% set p = s.package %}
+    {% set pv = s.preview %}
+    <p class="muted suggest-meta">Written in {{ {'hi': 'Hindi: Devanagari titles, Roman tags'}.get(s.language, s.language) }}{{ ' · Made for Kids rules (no comment or bell CTAs)' if s.made_for_kids }}{{ ' · Short' if s.is_short }} · {{ s.model }}</p>
+    {% if s.warnings %}<div class="notice">{% for w in s.warnings %}<div>{{ w }}</div>{% endfor %}</div>{% endif %}
+
+    {% if p.why %}
+    <div class="suggest-why"><strong>Why</strong><ul>{% for w in p.why %}<li>{{ w }}</li>{% endfor %}</ul></div>
+    {% endif %}
+
+    <form method="post" action="/suggestions/{{ s.id }}/apply" class="suggest-form" data-suggest-form
+          data-footer="{{ pv.footer }}" data-default-tags="{{ pv.default_tags | join(', ') }}">
+      <fieldset class="title-options">
+        <legend>Pick a title</legend>
+        {% for t in p.titles %}
+        <button type="button" class="title-option{{ ' on' if loop.first }}" data-title-option="{{ t }}">{{ t }}</button>
+        {% endfor %}
+      </fieldset>
+      <label class="field">Title <span class="count" data-count="title"></span>
+        <input type="text" name="title" value="{{ p.titles[0] }}" maxlength="200" required>
+      </label>
+      <label class="field">Description <span class="count" data-count="description"></span>
+        <textarea name="description" rows="7" maxlength="20000">{{ p.description }}</textarea>
+      </label>
+      {% if pv.footer %}<p class="muted small">The channel's footer is added at upload and counts toward the limit: <em>{{ pv.footer }}</em></p>{% endif %}
+      <label class="field">Tags, comma separated <span class="count" data-count="tags"></span>
+        <textarea name="tags" rows="3" maxlength="5000">{{ p.tags | join(', ') }}</textarea>
+      </label>
+      {% if pv.default_tags %}<p class="muted small">Default tags added at upload: {{ pv.default_tags | join(', ') }}</p>{% endif %}
+
+      <div class="before-after">
+        <div>
+          <h4>Before</h4>
+          <div class="ba-title">{{ pv.before.title or '—' }}</div>
+          <pre class="ba-text">{{ pv.before.description or '(no description)' }}</pre>
+          <div class="ba-tags">{{ pv.before.tags | join(', ') or '(no tags)' }}</div>
+          <div class="muted small">{{ pv.before_size.title }}/100 characters · {{ pv.before_size.description_bytes }}/5000 bytes · tags {{ pv.before_size.tags }}/500</div>
+        </div>
+        <div>
+          <h4>After</h4>
+          <div class="ba-title" data-after="title">{{ pv.after.title }}</div>
+          <pre class="ba-text" data-after="description">{{ pv.after.description }}</pre>
+          <div class="ba-tags" data-after="tags">{{ pv.after.tags | join(', ') }}</div>
+        </div>
+      </div>
+      {% if pv.problems %}<div class="notice bad">{% for e in pv.problems %}<div>{{ e }}</div>{% endfor %}</div>{% endif %}
+      <div class="notice bad" data-limit-problems hidden></div>
+
+      <label class="approve"><input type="checkbox" name="approve" value="yes" required> I've read the before and after and approve this change.</label>
+      <div class="actions" style="justify-content:flex-start">
+        <button class="btn primary" type="submit" data-apply>{{ 'Apply again' if s.status == 'applied' else 'Apply' }}</button>
+      </div>
+    </form>
+    {% if s.status == 'applied' %}
+    <form method="post" action="/suggestions/{{ s.id }}/undo" onsubmit="return confirm('Put back the title, description and tags from before Apply?')" class="undo-form">
+      <button class="btn" type="submit">Undo: restore the previous version</button>
+      {% if s.before %}<span class="muted small">Previous title: {{ s.before.title }}</span>{% endif %}
+    </form>
+    {% endif %}
+
+    {% if p.shorts %}
+    <div class="shorts-advice">
+      <h4>For the video itself</h4>
+      <p class="muted small">Not applied anywhere: the hub can't change what's inside a video. Use these when you make or edit it.</p>
+      <dl class="kv">
+        <dt>Hook, first 3 seconds</dt><dd>{{ p.shorts.hook }}</dd>
+        {% if p.shorts.on_screen_text %}<dt>On-screen text</dt><dd>{{ p.shorts.on_screen_text }}</dd>{% endif %}
+        {% if p.shorts.loop_ending %}<dt>Loop ending</dt><dd>{{ p.shorts.loop_ending }}</dd>{% endif %}
+        <dt>CTA</dt><dd>{{ p.shorts.cta }}</dd>
+      </dl>
+    </div>
+    {% endif %}
+
+    <form method="post" action="{{ suggest_url }}" class="regen">
+      {% if row %}<input type="hidden" name="row" value="{{ row }}">{% endif %}
+      <button class="btn small" type="submit">Ask Gemini again</button>
+      <span class="muted small">Better metadata can help the right viewers find a video; it doesn't guarantee views.</span>
+    </form>
+  {% endif %}
+</div>
+{%- endmacro %}

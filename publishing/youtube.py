@@ -286,6 +286,35 @@ def _clean(text: str) -> str:
     return (text or "").replace("<", "‹").replace(">", "›").strip()
 
 
+clean_text = _clean
+
+
+def tags_length(tags: List[str]) -> int:
+    """Length of the tags as YouTube counts it: a phrase with a space is quoted, tags are comma separated."""
+    return sum(len(t) + (2 if " " in t else 0) for t in tags) + max(len(tags) - 1, 0)
+
+
+def fit_tags(tags: List[str], limit: int = TAGS_LIMIT) -> List[str]:
+    """The tags in order, dropping any that would push the total past `limit`."""
+    kept: List[str] = []
+    for tag in (re.sub(r"[<>]", "", t).strip() for t in tags):
+        if tag and tags_length(kept + [tag]) <= limit:
+            kept.append(tag)
+    return kept
+
+
+def description_bytes(text: str) -> int:
+    """YouTube's description limit is in UTF-8 bytes; a Devanagari letter takes 3."""
+    return len((text or "").encode("utf-8"))
+
+
+def fit_description(text: str, limit: int = DESCRIPTION_LIMIT) -> str:
+    data = (text or "").encode("utf-8")
+    if len(data) <= limit:
+        return text or ""
+    return data[:limit].decode("utf-8", errors="ignore").rstrip()
+
+
 def upload_body(
     title: str,
     description: str,
@@ -299,12 +328,7 @@ def upload_body(
     title = _clean(title)
     if not title:
         raise YouTubeError("The video needs a title.")
-    kept, total = [], 0
-    for tag in (re.sub(r"[<>]", "", t).strip() for t in tags):
-        cost = len(tag) + (2 if " " in tag else 0) + (1 if kept else 0)  # YouTube counts quotes and commas
-        if tag and total + cost <= TAGS_LIMIT:
-            kept.append(tag)
-            total += cost
+    kept = fit_tags(tags)
     status = {
         "privacyStatus": "private",
         "selfDeclaredMadeForKids": made_for_kids,
@@ -316,7 +340,7 @@ def upload_body(
     return {
         "snippet": {
             "title": title[:TITLE_LIMIT],
-            "description": _clean(description)[:DESCRIPTION_LIMIT],
+            "description": fit_description(_clean(description)),
             "tags": kept,
             "categoryId": category_id,
             "defaultLanguage": language,
