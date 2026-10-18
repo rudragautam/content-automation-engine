@@ -501,6 +501,12 @@ def content_types(analytics, start: dt.date, end: dt.date) -> Dict[str, Dict[str
     return {str(r[0]).lower(): {"views": int(r[1]), "watch_minutes": float(r[2]), "avg_view_pct": float(r[3])} for r in res.get("rows") or []}
 
 
+def video_daily_views(analytics, video_id: str, start: dt.date, end: dt.date) -> Dict[str, int]:
+    """One video's views per day, {"YYYY-MM-DD": views}; days without views are missing."""
+    res = _report(analytics, start, end, dimensions="day", metrics="views", filters=f"video=={video_id}", sort="day")
+    return {r[0]: int(r[1]) for r in res.get("rows") or []}
+
+
 def reach_metrics(analytics, start: dt.date, end: dt.date) -> Optional[Dict[str, Any]]:
     """Impressions and click-through rate, if the API serves them; None when it doesn't.
 

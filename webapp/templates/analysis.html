@@ -1,5 +1,6 @@
 {% extends "base.html" %}
 {% from "_suggest.html" import panel, change_log %}
+{% from "_reports.html" import history_table, diff_metrics, diff_findings, change_results %}
 {% block title %}Analysis · {{ channel.name }}{% endblock %}
 {% block content %}
 {% set r = audit.report %}
@@ -69,6 +70,19 @@
   </section>
 </div>
 
+{% if diff %}
+<section class="card section" id="compare">
+  <div class="card-head"><h2>Since the previous analysis</h2><span class="muted">{{ previous.started_at | when }}, {{ diff.days_apart }} days earlier · <a href="/channels/{{ channel.id }}/analysis/{{ audit.id }}/compare/{{ previous.id }}">full comparison</a></span></div>
+  {{ diff_metrics(diff) }}
+  {{ diff_findings(diff) }}
+</section>
+{% endif %}
+
+<section class="card section" id="results">
+  <div class="card-head"><h2>Did the changes help?</h2><span class="muted">each changed video's views, 7 days before and after</span></div>
+  {{ change_results(r.change_results or []) }}
+</section>
+
 <section class="card section" id="videos">
   <div class="card-head"><h2>Suggestions per video</h2><span class="muted">{{ audit.suggestions | length }} videos{% if audit.writing %} · Gemini is writing {{ audit.writing }} more{% endif %}</span></div>
   {% if r.gemini_note %}<div class="notice">{{ r.gemini_note }}</div>{% endif %}
@@ -88,5 +102,9 @@
 {% endif %}
 
 {{ change_log(changes, '/channels/' ~ channel.id ~ '/analysis/' ~ audit.id) }}
+<section class="card section" id="history">
+  <div class="card-head"><h2>All analyses</h2><span class="muted">compare any two to see month-to-month progress</span></div>
+  {{ history_table(history, channel.id, audit) }}
+</section>
 <p class="muted small section">The AI can't change what's inside a video that is already uploaded (hook, visuals, audio); it can improve the title, description and tags, and advise on future videos. Better metadata can improve reach but doesn't guarantee views.</p>
 {% endblock %}

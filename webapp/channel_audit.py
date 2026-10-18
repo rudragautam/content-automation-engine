@@ -1,7 +1,8 @@
 """AI Optimizer: the channel analysis ("Run analysis" on a channel page).
 
 One run, in the background:
-1. sync the channel (daily stats and video list, as the Sync button does);
+1. sync the channel (daily stats and video list, as the Sync button does), and measure earlier
+   changes made on YouTube: each video's views 7 days before against 7 days after;
 2. read per-video analytics, traffic sources and the Shorts/long-form split (Analytics API,
    read-only) and every video's live metadata (Data API, 1 unit per 50 videos);
 3. run the rule-based checks (webapp.optimizer_checks) and save the report;
@@ -97,13 +98,101 @@ def gather(conn, channel_id: int, services) -> Dict[str, Any]:
             "playlists": playlists, "reach": reach, "tz": ZoneInfo(c["timezone"]), "live": live}
 
 
+MEASURE_DAYS = 7         # views this many days before a change against as many after
+DATA_LAG_DAYS = 3        # YouTube's per-day numbers settle after about 3 days
+MEASURE_WINDOW = 90      # changes older than this aren't measured again
+
+
+def measure_changes(conn, channel_id: int, analytics, today: dt.date) -> List[Dict[str, Any]]:
+    """For each change made on YouTube, the video's views in the 7 days before against the 7 days after."""
+    last_day = today - dt.timedelta(days=DATA_LAG_DAYS)
+    groups = conn.execute(
+        "SELECT change_group, youtube_video_id, MIN(created_at) created_at, MIN(status) status, GROUP_CONCAT(field, ', ') fields "
+        "FROM metadata_changes WHERE channel_id = ? AND action = 'apply' AND status IN ('applied', 'rolled_back') AND created_at >= ? "
+        "GROUP BY change_group ORDER BY created_at DESC",
+        (channel_id, timeutil.fmt(timeutil.now_local() - dt.timedelta(days=MEASURE_WINDOW)))).fetchall()
+    out = []
+    for g in groups:
+        changed = timeutil.parse(g["created_at"]).date()
+        title = conn.execute("SELECT title FROM videos WHERE youtube_video_id = ?", (g["youtube_video_id"],)).fetchone()
+        row = {"group": g["change_group"], "youtube_video_id": g["youtube_video_id"], "video_title": title[0] if title else g["youtube_video_id"],
+               "changed_at": g["created_at"], "fields": g["fields"], "rolled_back": g["status"] == "rolled_back",
+               "before": None, "after": None, "change_pct": None, "state": "waiting"}
+        after_end = changed + dt.timedelta(days=MEASURE_DAYS)
+        if after_end > last_day:
+            row["ready_on"] = (after_end + dt.timedelta(days=DATA_LAG_DAYS)).isoformat()
+            out.append(row)
+            continue
+        try:
+            views = yt.video_daily_views(analytics, g["youtube_video_id"], changed - dt.timedelta(days=MEASURE_DAYS), after_end)
+        except yt.YouTubeError as e:
+            row.update(state="unreadable", error=str(e)[:200])
+            out.append(row)
+            continue
+        before = sum(v for d, v in views.items() if d < changed.isoformat())
+        after = sum(v for d, v in views.items() if d > changed.isoformat())
+        row.update(before=before, after=after, state="measured",
+                   change_pct=round((after - before) / before * 100, 1) if before else None)
+        out.append(row)
+    return out
+
+
+def compare(old: Dict[str, Any], new: Dict[str, Any]) -> Dict[str, Any]:
+    """Two saved analyses side by side: metric changes, and findings fixed, new and still open."""
+    a, b = old["report"], new["report"]
+    metrics = []
+    for key, label, better in (("views", "Views (28 days)", "up"), ("avg_view_pct", "Average % viewed", "up"),
+                               ("recommended_pct", "From recommendations %", "up"), ("search_pct", "From search %", "up"),
+                               ("likes_per_1000", "Likes per 1,000 views", "up")):
+        x, y = a["numbers"].get(key), b["numbers"].get(key)
+        diff = None if x is None or y is None else round(y - x, 1)
+        metrics.append({"label": label, "old": x, "new": y, "diff": diff,
+                        "good": None if not diff else (diff > 0) == (better == "up")})
+    score_diff = None if old["score"] is None or new["score"] is None else new["score"] - old["score"]
+    metrics.insert(0, {"label": "Health score", "old": old["score"], "new": new["score"], "diff": score_diff,
+                       "good": None if not score_diff else score_diff > 0})
+    problems = lambda r: {f["key"]: f for f in r["findings"] if f["severity"] != "info"}
+    pa, pb = problems(a), problems(b)
+    return {
+        "metrics": metrics,
+        "fixed": [pa[k] for k in pa if k not in pb],
+        "new": [pb[k] for k in pb if k not in pa],
+        "open": [pb[k] for k in pb if k in pa],
+        "days_apart": (timeutil.parse(new["started_at"]).date() - timeutil.parse(old["started_at"]).date()).days,
+    }
+
+
+def history(conn, channel_id: int, limit: int = 12) -> List[Dict[str, Any]]:
+    out = []
+    for a in conn.execute("SELECT * FROM channel_audits WHERE channel_id = ? ORDER BY id DESC LIMIT ?", (channel_id, limit)):
+        r = json.loads(a["report_json"]) if a["report_json"] else {}
+        out.append({**dict(a), "numbers": r.get("numbers", {}), "problems": sum(1 for f in r.get("findings", []) if f["severity"] != "info")})
+    return out
+
+
+def previous(conn, audit: Dict[str, Any]) -> Optional[Dict[str, Any]]:
+    """The last finished analysis of the same channel before this one."""
+    a = conn.execute("SELECT id FROM channel_audits WHERE channel_id = ? AND status = 'ready' AND id < ? ORDER BY id DESC LIMIT 1",
+                     (audit["channel_id"], audit["id"])).fetchone()
+    return latest_ready(conn, a["id"]) if a else None
+
+
+def latest_ready(conn, audit_id: int) -> Optional[Dict[str, Any]]:
+    a = conn.execute("SELECT * FROM channel_audits WHERE id = ? AND status = 'ready'", (audit_id,)).fetchone()
+    if not a:
+        return None
+    return {**dict(a), "report": json.loads(a["report_json"])}
+
+
 def run(audit_id: int, services=None, client=None) -> None:
     conn = db.connect()
     suggestion_ids: List[int] = []
     try:
         a = conn.execute("SELECT * FROM channel_audits WHERE id = ?", (audit_id,)).fetchone()
         try:
-            data = gather(conn, a["channel_id"], services or youtube_sync._services(conn, a["channel_id"]))
+            services = services or youtube_sync._services(conn, a["channel_id"])
+            data = gather(conn, a["channel_id"], services)
+            changes = measure_changes(conn, a["channel_id"], services[1], data["today"])
         except yt.QuotaExceeded:
             raise ActionError("YouTube's daily API quota is used up. Run the analysis again after midnight Pacific time.")
         except yt.YouTubeError as e:
@@ -120,7 +209,7 @@ def run(audit_id: int, services=None, client=None) -> None:
             "reach": data["reach"], "playlists": data["playlists"], "period": PERIOD_DAYS, "video_days": VIDEO_DAYS,
             "videos": [{k: v[k] for k in ("youtube_id", "video_id", "title", "is_short", "views", "lifetime_views", "avg_view_pct", "likes",
                                          "shares", "subs_gained", "published_at", "made_for_kids")} for v in videos],
-            "picked": [v["youtube_id"] for v in picked], "rated_videos": len(rated),
+            "picked": [v["youtube_id"] for v in picked], "rated_videos": len(rated), "change_results": changes,
         }
         model, gemini_note = None, ""
         try:

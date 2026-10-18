@@ -77,6 +77,7 @@ templates.env.filters["signed"] = lambda n: f"{n:+,}"
 # JSON for <script type="application/json"> blocks: "</" is escaped so the data can't close the tag.
 templates.env.filters["tojson_safe"] = lambda v: Markup(json.dumps(v, ensure_ascii=False).replace("</", "<\\/"))
 templates.env.globals["niche_name"] = analytics.niche_name
+templates.env.globals["language_name"] = lambda code: channel_setup.LANGUAGES.get(code, code)
 templates.env.globals["renderable"] = {n for n in NICHES if queue.can_render(n)}
 
 
@@ -139,6 +140,7 @@ def channel_page(request: Request, channel_id: int, days: int = 28, notice: str 
             can_render=queue.can_render(channel["niche"]),
             notice=notice, problem=problem, client_ready=os.path.exists(youtube_sync.client_path()),
             audit=channel_audit.latest(conn, channel_id), changes=metadata_apply.change_log(conn, channel_id, 10),
+            audits=channel_audit.history(conn, channel_id, 6),
         )
 
 
@@ -494,8 +496,23 @@ def analysis_page(request: Request, channel_id: int, audit_id: int, notice: str 
             audit = None
         if not channel or not audit or audit["channel_id"] != channel_id:
             return Response("Analysis not found", status_code=404)
+        prev = channel_audit.previous(conn, audit) if audit["status"] == "ready" else None
         return page(request, "analysis.html", channel=dict(channel), audit=audit, changes=metadata_apply.change_log(conn, channel_id),
-                    names=optimizer_checks.SOURCE_NAMES, notice=notice, problem=problem, active_override="analytics")
+                    names=optimizer_checks.SOURCE_NAMES, previous=prev, diff=channel_audit.compare(prev, audit) if prev else None,
+                    history=channel_audit.history(conn, channel_id), notice=notice, problem=problem, active_override="analytics")
+
+
+@app.get("/channels/{channel_id}/analysis/{audit_id}/compare/{other_id}")
+def analysis_compare(request: Request, channel_id: int, audit_id: int, other_id: int):
+    with db.session() as conn:
+        channel = conn.execute("SELECT * FROM channels WHERE id = ?", (channel_id,)).fetchone()
+        new, old = channel_audit.latest_ready(conn, audit_id), channel_audit.latest_ready(conn, other_id)
+        if not channel or not new or not old or {new["channel_id"], old["channel_id"]} != {channel_id}:
+            return Response("Analysis not found", status_code=404)
+        if old["id"] > new["id"]:
+            new, old = old, new
+        return page(request, "compare.html", channel=dict(channel), new=new, old=old, diff=channel_audit.compare(old, new),
+                    history=channel_audit.history(conn, channel_id), active_override="analytics")
 
 
 @app.get("/api/analysis/{audit_id}")

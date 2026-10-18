@@ -1,6 +1,7 @@
 {% extends "base.html" %}
 {% from "_macros.html" import delta_short, connection, delta, range_filter, queue_row, status, pager %}
 {% from "_suggest.html" import change_log %}
+{% from "_reports.html" import history_table %}
 {% block title %}{{ channel.name }}{% endblock %}
 {% block content %}
 <div class="page-head">
@@ -81,6 +82,11 @@
     <div class="notice bad">The last analysis failed: {{ audit.error }}</div>
   {% else %}
     <p class="secondary">Reads this channel's analytics from YouTube (read-only), runs fixed checks with real numbers, then asks Gemini for better titles, descriptions and tags for the weakest videos. Nothing changes on YouTube until you approve it.</p>
+  {% endif %}
+  {% if audits | length > 1 %}
+  <details class="audit-history"><summary class="muted small">Earlier analyses ({{ audits | length - 1 }})</summary>
+    {{ history_table(audits, channel.id, audits[0]) }}
+  </details>
   {% endif %}
   {% if not audit or audit.status != 'running' %}
   <form method="post" action="/channels/{{ channel.id }}/analysis" class="form-row" style="margin-top:10px">

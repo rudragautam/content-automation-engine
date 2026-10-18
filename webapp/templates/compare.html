@@ -1,0 +1,24 @@
+{% extends "base.html" %}
+{% from "_reports.html" import history_table, diff_metrics, diff_findings %}
+{% block title %}Compare analyses · {{ channel.name }}{% endblock %}
+{% block content %}
+<div class="page-head">
+  <div>
+    <div class="muted" style="font-size:12.5px"><a href="/channels/{{ channel.id }}#analysis">{{ channel.name }}</a> / <a href="/channels/{{ channel.id }}/analysis/{{ new.id }}">Analysis</a> /</div>
+    <h1>{{ old.started_at | when }} → {{ new.started_at | when }}</h1>
+    <div class="sub">{{ diff.days_apart }} days apart</div>
+  </div>
+</div>
+<section class="card">
+  <div class="card-head"><h2>Numbers</h2><span class="muted">each analysis covers its own last 28 days</span></div>
+  {{ diff_metrics(diff) }}
+</section>
+<section class="card section">
+  <div class="card-head"><h2>Findings</h2><span class="muted">problems from the rule-based checks</span></div>
+  {{ diff_findings(diff) }}
+</section>
+<section class="card section">
+  <div class="card-head"><h2>All analyses</h2></div>
+  {{ history_table(history, channel.id, new) }}
+</section>
+{% endblock %}

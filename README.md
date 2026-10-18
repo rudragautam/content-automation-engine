@@ -130,11 +130,26 @@ once per channel with the same sign-in, and its daily CSV files start about 48 h
 `publishing.youtube.reach_metrics` is where that source plugs in; until then the report
 says CTR isn't available and points to Studio's Reach tab.
 
+### AI Optimizer: reports and comparison
+
+Every analysis is saved, so you can track progress month to month:
+
+- **History:** "All analyses" on the report page, and "Earlier analyses" on the channel page.
+- **Comparison:** "Since the previous analysis" on the report page, or **Compare** for any
+  two analyses (`/channels/{id}/analysis/{a}/compare/{b}`). It shows the score, views,
+  % viewed, recommendation share, search share and likes per 1,000 views, plus which
+  problems were **fixed**, which are **new** and which are **still open**.
+- **Did the changes help?** For each change made on YouTube in the last 90 days, the
+  video's views in the 7 days before against the 7 days after (one read-only Analytics
+  query each). A change is measured once 7 days, plus YouTube's 3-day delay, have passed.
+
 Limits:
 
 - It can't change what's inside a video (hook, visuals, audio). The Shorts advice is for
   the next edit.
 - YouTube's analytics lag 2–3 days, and very small channels get few breakdowns.
+- One video's views before and after a change are a hint, not proof: season, other
+  uploads and outside shares move views too.
 - Better metadata can improve reach, but it doesn't guarantee views.
 - The channel's language and Made for Kids setting come from **Setup → Upload defaults**.
   A channel with no saved defaults is treated as its niche's language.

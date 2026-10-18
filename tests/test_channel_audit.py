@@ -84,7 +84,9 @@ class FakeAnalytics:
         return FakeRequest(error=http_error(400, "The query is not supported."))  # impressions / CTR
 
 
-class TestChannelAnalysis(HubTestCase):
+class ChannelCase(HubTestCase):
+    """A real, connected channel with 6 Made for Kids Shorts on a fake YouTube."""
+
     def setUp(self):
         super().setUp()
         with db.session() as conn:
@@ -130,6 +132,8 @@ class TestChannelAnalysis(HubTestCase):
         with db.session() as conn:
             return [dict(r) for r in conn.execute("SELECT * FROM metadata_changes ORDER BY id")]
 
+
+class TestChannelAnalysis(ChannelCase):
     # ---------- analysis ----------
 
     def test_analysis_report_with_real_numbers(self):
@@ -342,3 +346,68 @@ class TestYouTubeEdits(unittest.TestCase):
 
 if __name__ == "__main__":
     unittest.main()
+
+
+class TestReports(ChannelCase):
+    """Phase (c): saved reports, month-to-month comparison and the results of changes."""
+
+    def test_second_analysis_compares_with_the_first(self):
+        first = self.analyse()
+        self.yt.store["vid0"]["snippet"]["description"] = "x" * 200  # fix one thing on YouTube
+        second = self.analyse()
+        page = self.client.get(f"/channels/{self.ch}/analysis/{second}").text
+        self.assertIn("Since the previous analysis", page)
+        self.assertIn("All analyses", page)
+        self.assertIn(f"/channels/{self.ch}/analysis/{second}/compare/{first}", page)
+        compare = self.client.get(f"/channels/{self.ch}/analysis/{second}/compare/{first}")
+        self.assertEqual(compare.status_code, 200)
+        self.assertIn("Still open", compare.text)
+        self.assertIn("Health score", compare.text)
+        # the order of the two IDs doesn't matter, but both must be this channel's
+        self.assertEqual(self.client.get(f"/channels/{self.ch}/analysis/{first}/compare/{second}").status_code, 200)
+        self.assertEqual(self.client.get(f"/channels/{self.focus_channel}/analysis/{second}/compare/{first}").status_code, 404)
+        self.assertIn("Earlier analyses (1)", self.client.get(f"/channels/{self.ch}").text)
+
+    def test_compare_lists_fixed_new_and_open(self):
+        old = {"score": 40, "started_at": "2026-09-18T10:00", "report": {"numbers": {"views": 100, "avg_view_pct": 50.0, "recommended_pct": 10.0,
+               "search_pct": 1.0, "likes_per_1000": 20.0}, "findings": [
+                   {"key": "search", "severity": "medium", "title": "Search"}, {"key": "stale", "severity": "high", "title": "Stale"},
+                   {"key": "engagement_ok", "severity": "info", "title": "fine"}]}}
+        new = {"score": 55, "started_at": "2026-10-18T10:00", "report": {"numbers": {"views": 160, "avg_view_pct": 48.0, "recommended_pct": 30.0,
+               "search_pct": 4.0, "likes_per_1000": 20.0}, "findings": [
+                   {"key": "search", "severity": "medium", "title": "Search"}, {"key": "batches", "severity": "medium", "title": "Batches"}]}}
+        d = channel_audit.compare(old, new)
+        self.assertEqual([f["key"] for f in d["fixed"]], ["stale"])
+        self.assertEqual([f["key"] for f in d["new"]], ["batches"])
+        self.assertEqual([f["key"] for f in d["open"]], ["search"])
+        self.assertEqual(d["days_apart"], 30)
+        m = {x["label"]: x for x in d["metrics"]}
+        self.assertEqual((m["Health score"]["diff"], m["Health score"]["good"]), (15, True))
+        self.assertEqual((m["Average % viewed"]["diff"], m["Average % viewed"]["good"]), (-2.0, False))
+        self.assertIsNone(m["Likes per 1,000 views"]["good"])
+
+    def test_change_results_wait_then_measure(self):
+        audit_id = self.analyse()
+        s = self.suggestion(audit_id)
+        self.apply(s["id"])
+        with db.session() as conn:
+            results = channel_audit.measure_changes(conn, self.ch, self.an, timeutil.now_local().date())
+        self.assertEqual(results[0]["state"], "waiting")  # changed today: no "after" days yet
+        ten_days_ago = timeutil.fmt(timeutil.now_local() - dt.timedelta(days=12))
+        with db.session() as conn:
+            conn.execute("UPDATE metadata_changes SET created_at = ?", (ten_days_ago,))
+        self.an.query = lambda **k: FakeRequest({"rows": [
+            [(dt.date.fromisoformat(k["startDate"]) + dt.timedelta(days=i)).isoformat(), 2 if i < 7 else 5] for i in range(15)]})
+        with db.session() as conn:
+            results = channel_audit.measure_changes(conn, self.ch, self.an, timeutil.now_local().date())
+        self.assertEqual((results[0]["state"], results[0]["before"], results[0]["after"]), ("measured", 14, 35))
+        self.assertEqual(results[0]["change_pct"], 150.0)
+
+    def test_history_lists_every_analysis(self):
+        self.analyse()
+        self.analyse()
+        with db.session() as conn:
+            h = channel_audit.history(conn, self.ch)
+        self.assertEqual(len(h), 2)
+        self.assertGreater(h[0]["id"], h[1]["id"])
+        self.assertIn("views", h[0]["numbers"])

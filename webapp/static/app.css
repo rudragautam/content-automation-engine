@@ -432,3 +432,11 @@ code { overflow-wrap: anywhere; }
   .change-values { grid-template-columns: minmax(0, 1fr); gap: 2px; }
   .change-head form { margin-left: 0; }
 }
+
+/* AI Optimizer: comparison and history */
+.diff-findings { margin-top: 14px; }
+.diff-findings h3 { margin: 0 0 6px; }
+.diff-findings ul { margin: 0; padding-left: 18px; display: grid; gap: 3px; font-size: 13px; }
+.current-row td { background: var(--accent-wash); }
+.audit-history { margin-top: 10px; }
+.audit-history summary { cursor: pointer; }
