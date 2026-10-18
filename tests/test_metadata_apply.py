@@ -100,7 +100,7 @@ class TestSuggestionsInHub(HubTestCase):
         page = self.client.get(f"/drafts/{self.draft}").text
         self.assertIn("हाथ धोना क्यों ज़रूरी है? | Good Habits for Kids", page)
         self.assertIn("Before", page)
-        self.assertIn("I've read the before and after", page)
+        self.assertIn("read the before and after", page)
         self.assertIn("For the video itself", page)
 
         original = self.draft_row()

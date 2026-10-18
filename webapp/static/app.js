@@ -202,12 +202,32 @@ document.querySelectorAll("[data-suggest-form]").forEach((form) => {
     if (!t) bad.push("The title is empty.");
     problems.hidden = !bad.length;
     problems.textContent = bad.join(" ");
-    form.querySelector("[data-apply]").disabled = bad.length > 0;
+    // Apply stays off until the change fits YouTube's limits and the approval box is ticked.
+    form.querySelector("[data-apply]").disabled = bad.length > 0 || !form.querySelector("[data-approve]").checked;
     form.querySelectorAll("[data-title-option]").forEach((b) => b.classList.toggle("on", b.dataset.titleOption === t));
   };
   form.querySelectorAll("[data-title-option]").forEach((b) => b.addEventListener("click", () => { title.value = b.dataset.titleOption; update(); }));
   [title, description, tags].forEach((el) => el.addEventListener("input", update));
+  form.querySelector("[data-approve]").addEventListener("change", update);
   update();
+});
+
+// Analysis report: a link to one video (#s-12) opens its row; filter chips show one kind of video.
+const openFromHash = () => {
+  const row = location.hash.length > 1 && document.querySelector(`details.video-row#${CSS.escape(location.hash.slice(1))}`);
+  if (row) { row.open = true; row.scrollIntoView({ block: "start" }); }
+};
+openFromHash();
+window.addEventListener("hashchange", openFromHash);
+document.querySelectorAll("[data-video-filter]").forEach((bar) => {
+  bar.addEventListener("click", (e) => {
+    const b = e.target.closest("button[data-filter]");
+    if (!b) return;
+    bar.querySelectorAll("button").forEach((x) => x.classList.toggle("on", x === b));
+    document.querySelectorAll("details.video-row").forEach((row) => {
+      row.hidden = b.dataset.filter !== "all" && row.dataset.state !== b.dataset.filter;
+    });
+  });
 });
 
 mountAll();
