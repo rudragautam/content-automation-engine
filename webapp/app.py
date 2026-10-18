@@ -15,7 +15,7 @@ from markupsafe import Markup
 
 from content_templates import NICHES, workbook_bytes
 from publishing.youtube import ABOUT_LIMIT as YT_ABOUT_LIMIT, YouTubeError
-from webapp import ai_drafts, analytics, channel_art, channel_names, channel_setup, db, metadata_apply, mock, optimizer, queue, scope, timeutil, youtube_sync
+from webapp import ai_drafts, analytics, channel_art, channel_audit, channel_names, channel_setup, db, metadata_apply, mock, optimizer, optimizer_checks, queue, scope, timeutil, youtube_sync
 from webapp.paging import paginate
 from webapp.queue import ActionError
 
@@ -35,6 +35,9 @@ async def lifespan(_app):
         conn.execute("UPDATE videos SET status = 'rendered', error = 'Upload interrupted by a restart; upload again.' WHERE status = 'uploading'")
         conn.execute("UPDATE drafts SET status = 'failed', error = 'Generation interrupted by a restart; generate again.' WHERE status = 'generating'")
         conn.execute("UPDATE video_suggestions SET status = 'failed', error = 'Interrupted by a restart; ask for suggestions again.' WHERE status = 'generating'")
+        conn.execute("UPDATE channel_audits SET status = 'failed', error = 'Interrupted by a restart; run the analysis again.' WHERE status = 'running'")
+        # An Apply cut off between the backup and YouTube's answer: YouTube may or may not have it, so say so.
+        conn.execute("UPDATE metadata_changes SET status = 'failed', error = 'Interrupted by a restart; check the video in Studio.' WHERE status = 'pending'")
     yield
 
 
@@ -135,6 +138,7 @@ def channel_page(request: Request, channel_id: int, days: int = 28, notice: str 
             queue=paginate([dict(r) for r in queue_rows], request.query_params, "qpage", 20, anchor="queue"), slots=queue.slots(conn, channel_id),
             can_render=queue.can_render(channel["niche"]),
             notice=notice, problem=problem, client_ready=os.path.exists(youtube_sync.client_path()),
+            audit=channel_audit.latest(conn, channel_id), changes=metadata_apply.change_log(conn, channel_id, 10),
         )
 
 
@@ -370,7 +374,9 @@ def draft_discard(draft_id: int):
 
 def _suggestion_back(s, notice: str = "", problem: str = "") -> RedirectResponse:
     query = "&".join(f"{k}={_q(v)}" for k, v in (("notice", notice), ("problem", problem)) if v)
-    if s["draft_id"]:
+    if s["audit_id"]:
+        url = f"/channels/{s['channel_id']}/analysis/{s['audit_id']}" + (f"?{query}" if query else "") + f"#s-{s['id']}"
+    elif s["draft_id"]:
         url = f"/drafts/{s['draft_id']}" + (f"?{query}" if query else "") + f"#row-{s['draft_row']}"
     else:
         url = f"/videos/{s['video_id']}/suggestions" + (f"?{query}" if query else "")
@@ -416,7 +422,8 @@ def suggestion_status(suggestion_id: int):
 
 
 @app.post("/suggestions/{suggestion_id}/apply")
-def suggestion_apply(suggestion_id: int, title: str = Form(""), description: str = Form(""), tags: str = Form(""), approve: str = Form("")):
+def suggestion_apply(suggestion_id: int, title: str = Form(""), description: str = Form(""), tags: str = Form(""), approve: str = Form(""),
+                     confirm_recent: str = Form("")):
     with db.session() as conn:
         try:
             s = optimizer.get(conn, suggestion_id)
@@ -425,11 +432,13 @@ def suggestion_apply(suggestion_id: int, title: str = Form(""), description: str
         if approve != "yes":
             return _suggestion_back(s, problem="Tick the box to approve the change first.")
         try:
-            check = metadata_apply.apply(conn, s, title, description, tags)
+            check = metadata_apply.apply(conn, s, title, description, tags, confirm_recent=confirm_recent == "yes")
         except ActionError as e:
             conn.rollback()
             return _suggestion_back(s, problem=str(e))
     changed = ", ".join(check["changed"])
+    if metadata_apply.is_remote(s):
+        return _suggestion_back(s, notice=f"Changed the {changed} on YouTube. The old version is backed up; Roll back puts it back.")
     return _suggestion_back(s, notice=f"Applied the new {changed}. It goes to YouTube with the upload; Undo puts the old one back.")
 
 
@@ -445,7 +454,72 @@ def suggestion_undo(suggestion_id: int):
         except ActionError as e:
             conn.rollback()
             return _suggestion_back(s, problem=str(e))
-    return _suggestion_back(s, notice="Undone: the previous title, description and tags are back.")
+    return _suggestion_back(s, notice="Rolled back on YouTube: the previous title, description and tags are live again." if metadata_apply.is_remote(s)
+                            else "Undone: the previous title, description and tags are back.")
+
+
+# ---------- AI Optimizer: channel analysis and changes on YouTube ----------
+
+@app.post("/suggestions/{suggestion_id}/regenerate")
+def suggestion_regenerate(suggestion_id: int):
+    with db.session() as conn:
+        try:
+            s = optimizer.get(conn, suggestion_id)
+        except ActionError:
+            return Response("Suggestion not found", status_code=404)
+        try:
+            optimizer.restart(conn, suggestion_id)
+        except ActionError as e:
+            return _suggestion_back(s, problem=str(e))
+    return _suggestion_back(s)
+
+
+@app.post("/channels/{channel_id}/analysis")
+def analysis_start(channel_id: int, video_limit: int = Form(channel_audit.DEFAULT_VIDEOS)):
+    try:
+        with db.session() as conn:
+            audit_id = channel_audit.start(conn, channel_id, video_limit)
+        return RedirectResponse(f"/channels/{channel_id}/analysis/{audit_id}", status_code=303)
+    except ActionError as e:
+        return RedirectResponse(f"/channels/{channel_id}?problem={_q(e)}#analysis", status_code=303)
+
+
+@app.get("/channels/{channel_id}/analysis/{audit_id}")
+def analysis_page(request: Request, channel_id: int, audit_id: int, notice: str = "", problem: str = ""):
+    with db.session() as conn:
+        channel = conn.execute("SELECT * FROM channels WHERE id = ?", (channel_id,)).fetchone()
+        try:
+            audit = channel_audit.load(conn, audit_id)
+        except ActionError:
+            audit = None
+        if not channel or not audit or audit["channel_id"] != channel_id:
+            return Response("Analysis not found", status_code=404)
+        return page(request, "analysis.html", channel=dict(channel), audit=audit, changes=metadata_apply.change_log(conn, channel_id),
+                    names=optimizer_checks.SOURCE_NAMES, notice=notice, problem=problem, active_override="analytics")
+
+
+@app.get("/api/analysis/{audit_id}")
+def analysis_status(audit_id: int):
+    with db.session() as conn:
+        row = conn.execute("SELECT status, error FROM channel_audits WHERE id = ?", (audit_id,)).fetchone()
+        if not row:
+            return error("Analysis not found.", 404)
+        writing = conn.execute("SELECT COUNT(*) FROM video_suggestions WHERE audit_id = ? AND status = 'generating'", (audit_id,)).fetchone()[0]
+    return {**dict(row), "writing": writing}
+
+
+@app.post("/changes/{change_group}/rollback")
+def change_rollback(change_group: str, back: str = Form("")):
+    back = back if re.fullmatch(r"/channels/\d+(/analysis/\d+)?", back or "") else "/"
+    if not re.fullmatch(r"[0-9a-f]{32}", change_group):
+        return Response("Change not found", status_code=404)
+    with db.session() as conn:
+        try:
+            metadata_apply.rollback(conn, change_group)
+        except ActionError as e:
+            conn.rollback()
+            return RedirectResponse(f"{back}?problem={_q(e)}#changes", status_code=303)
+    return RedirectResponse(f"{back}?notice={_q('Rolled back on YouTube: the previous title, description and tags are live again.')}#changes", status_code=303)
 
 
 @app.post("/content/{niche}/upload")

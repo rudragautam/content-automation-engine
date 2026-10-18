@@ -154,6 +154,17 @@ document.querySelectorAll("[data-suggest-poll]").forEach((box) => {
   setTimeout(check, 3000);
 });
 
+// A channel analysis in progress: reload once the report is saved.
+const auditBox = document.querySelector("[data-analysis-poll]");
+if (auditBox) {
+  const check = async () => {
+    const res = await fetch(`/api/analysis/${auditBox.dataset.analysisPoll}`).then((r) => r.json()).catch(() => ({}));
+    if (res.status === "running" || !res.status) return setTimeout(check, 3000);
+    location.reload();
+  };
+  setTimeout(check, 3000);
+}
+
 // Suggestions form: pick a title, and keep the "After" preview and YouTube's limits in step with edits.
 // Counted the way the upload sends it: the channel's footer and default tags are added (webapp/metadata_apply.py).
 const LIMITS = { title: 100, description: 5000, tags: 500 };

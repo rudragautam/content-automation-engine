@@ -35,6 +35,10 @@ KIDS_BLOCKED_CTA = re.compile(
     r"comment|कमेंट|कॉमेंट|टिप्पणी|reply|रिप्लाई|\bbell\b|घंटी|notification|नोटिफिकेशन|🔔|"
     r"neeche\s+likh|नीचे\s+लिख|batao\s+neeche|niche\s+batao", re.IGNORECASE)
 SAFE_CTA = {"hi": "Agla part dekho 👉", "en": "Watch the next one 👉"}
+# Advice that can't be followed on a Made for Kids video: these features are switched off there.
+KIDS_BLOCKED_ADVICE = re.compile(KIDS_BLOCKED_CTA.pattern + r"|end[\s-]?screen|\bcards?\b|community post|pinned|live chat|personali[sz]ed ads",
+                                 re.IGNORECASE)
+NOT_ENOUGH = "Not enough data yet"
 
 _run_lock = threading.Lock()  # one optimizer thread talks to Gemini at a time; the free tier has low rate limits
 
@@ -61,6 +65,13 @@ class Target:
     best_titles: List[Tuple[str, int]] = field(default_factory=list)
     footer: str = ""
     default_tags: List[str] = field(default_factory=list)
+    analysis: bool = False             # a video on YouTube: also ask for a score, reasons, actions and ideas
+    findings: List[str] = field(default_factory=list)          # this video's numbers (optimizer_checks.video_findings)
+    channel_findings: List[str] = field(default_factory=list)  # the channel's main findings
+
+    @property
+    def too_little_data(self) -> bool:
+        return any(f.startswith(NOT_ENOUGH) for f in self.findings)
 
 
 # ---------- prompt and schema ----------
@@ -69,7 +80,7 @@ DEVANAGARI_TITLE_RULE = ("Title words in Hindi, Devanagari script, even where th
                          "Only the channel name, #shorts and one or two English search words may stay in Roman.")
 
 
-def package_schema(is_short: bool, language: str = "") -> Dict[str, Any]:
+def package_schema(is_short: bool, language: str = "", analysis: bool = False) -> Dict[str, Any]:
     string = {"type": "STRING"}
     titles = f"Three different title options, best first, each at most {yt.TITLE_LIMIT} characters."
     props: Dict[str, Any] = {
@@ -91,6 +102,21 @@ def package_schema(is_short: bool, language: str = "") -> Dict[str, Any]:
         }, "required": ["hook", "on_screen_text", "loop_ending", "cta"],
             "propertyOrdering": ["hook", "on_screen_text", "loop_ending", "cta"]}
         order.append("shorts")
+    if analysis:
+        props.update({
+            "health_score": {"type": "INTEGER", "description": "0-100: how well this video's metadata and numbers set it up for reach."},
+            "summary": {"type": "STRING", "description": "2-3 short lines: what holds this video back and the single most useful fix."},
+            "reasons": {"type": "ARRAY", "maxItems": 4, "items": {"type": "OBJECT", "properties": {
+                "reason": string, "number": {"type": "STRING", "description": "The number from the findings this reason rests on, e.g. 4% search."}},
+                "required": ["reason", "number"], "propertyOrdering": ["reason", "number"]},
+                "description": "Reasons for low reach, each tied to a number from the findings. Empty if the findings say not enough data."},
+            "actions": {"type": "ARRAY", "items": string, "minItems": 5, "maxItems": 7, "description": "Concrete actions, most impact first."},
+            "ideas": {"type": "ARRAY", "minItems": 3, "maxItems": 3, "items": {"type": "OBJECT", "properties": {
+                "title": string, "why": {"type": "STRING", "description": "Which existing video or number it builds on."}},
+                "required": ["title", "why"], "propertyOrdering": ["title", "why"]},
+                "description": "Follow-up video ideas built on what already worked on this channel."},
+        })
+        order += ["health_score", "summary", "reasons", "actions", "ideas"]
     return {"type": "OBJECT", "properties": props, "required": order, "propertyOrdering": order}
 
 
@@ -115,6 +141,18 @@ def build_prompt(t: Target, problems: List[str] = ()) -> str:
         "SHORTS: this is a vertical Short. Give a hook for the first 3 seconds, big on-screen text, a loop ending and a CTA.",
         "- The hook states the problem or question at once; no greetings, no channel intro.",
     ] if t.is_short else []
+    analysis = [
+        "NUMBERS FROM YOUTUBE ANALYTICS for this video (the only facts you may base reasons on):",
+        *[f"- {f}" for f in t.findings],
+        "THE CHANNEL'S MAIN FINDINGS:" if t.channel_findings else "",
+        *[f"- {f}" for f in t.channel_findings],
+        "ANALYSIS RULES:",
+        "- Every reason names the number it rests on, copied from the lines above. Never invent a number or a cause.",
+        "- If the numbers say \"Not enough data yet\", return no reasons and say so in the summary; still improve the metadata.",
+        "- Actions are things the creator can do now or in the next videos; the video itself can't be re-edited, only its metadata.",
+        "- Ideas build on this channel's best videos or topics, for the same audience.",
+        "- No advice about comments, notifications, end screens, cards or community posts: they're off on Made for Kids videos." if t.made_for_kids else "",
+    ] if t.analysis else []
     return "\n".join(filter(None, [
         f"Improve the YouTube title, description and tags of one video on the channel \"{t.channel_name}\"{' (' + t.handle + ')' if t.handle else ''},"
         " so more of the right viewers find it in search and in their feeds.",
@@ -128,7 +166,7 @@ def build_prompt(t: Target, problems: List[str] = ()) -> str:
         f"- Description: {t.description[:400]}" if t.description else "- Description: (empty)",
         f"- Tags: {', '.join(t.tags)}" if t.tags else "- Tags: (none)",
         f"- What it covers: {t.content[:600]}" if t.content else "",
-        *script, *kids, *shorts,
+        *script, *kids, *shorts, *analysis,
         "RULES:",
         f"- Titles: aim for 40-70 characters, never over {yt.TITLE_LIMIT}. Put the main search phrase first. Keep the channel's naming pattern"
         " if its titles share one (e.g. \"| Channel Name\")" + (", but follow the LANGUAGE rule for the script" if t.language == "hi" else "") +
@@ -257,7 +295,65 @@ def check_package(answer: Any, t: Target) -> Tuple[Dict[str, Any], List[str], Li
 
     package = {"titles": titles, "description": description, "description_body": body, "hashtags": hashtags,
                "tags": tags, "why": why, "shorts": shorts}
+    if t.analysis:
+        package.update(_check_analysis(answer, t, warnings, problems))
     return package, warnings, problems
+
+
+def _check_analysis(answer: Dict[str, Any], t: Target, warnings: List[str], problems: List[str]) -> Dict[str, Any]:
+    blocked = KIDS_BLOCKED_ADVICE if t.made_for_kids else None
+    try:
+        score = max(0, min(100, int(answer.get("health_score"))))
+    except (TypeError, ValueError):
+        score = None
+        problems.append("health_score must be a whole number from 0 to 100.")
+    summary = _cut_words(" ".join(str(answer.get("summary") or "").split()), 400)
+    if not summary:
+        problems.append("The summary is empty.")
+
+    reasons, untied = [], 0
+    for r in answer.get("reasons") or []:
+        if not isinstance(r, dict):
+            continue
+        reason, number = " ".join(str(r.get("reason") or "").split()), " ".join(str(r.get("number") or "").split())
+        if not reason:
+            continue
+        if not re.search(r"\d", number + reason):
+            untied += 1
+            continue
+        if blocked and blocked.search(reason):
+            continue
+        reasons.append({"reason": _cut_words(reason, 240), "number": _cut_words(number, 80)})
+    if untied:
+        warnings.append(f"Left out {untied} reason{'s' if untied > 1 else ''} not tied to a number.")
+    if t.too_little_data:
+        if reasons:
+            warnings.append("This video has too few views to say why; Gemini's guesses were left out.")
+        reasons = []
+    elif not reasons and t.findings:
+        problems.append("Give at least one reason, each tied to a number from the findings.")
+
+    actions, dropped = [], 0
+    for a in answer.get("actions") or []:
+        a = _cut_words(" ".join(str(a).split()), 240)
+        if not a or a.lower() in {x.lower() for x in actions}:
+            continue
+        if blocked and blocked.search(a):
+            dropped += 1
+            continue
+        actions.append(a)
+    if dropped:
+        warnings.append(f"Left out {dropped} action{'s' if dropped > 1 else ''} using features that are off on Made for Kids videos.")
+    actions = actions[:7]
+    if len(actions) < 3:
+        problems.append(f"Only {len(actions)} usable actions; give 5-7.")
+
+    ideas = []
+    for i in answer.get("ideas") or []:
+        if isinstance(i, dict) and str(i.get("title") or "").strip() and not (blocked and blocked.search(str(i.get("title")) + str(i.get("why")))):
+            ideas.append({"title": _cut_words(" ".join(str(i["title"]).split()), 120), "why": _cut_words(" ".join(str(i.get("why") or "").split()), 240)})
+    return {"health_score": score, "summary": summary, "reasons": reasons, "actions": actions, "ideas": ideas[:3],
+            "too_little_data": t.too_little_data}
 
 
 def _cut_words(text: str, limit: int) -> str:
@@ -273,7 +369,7 @@ def generate_package(client, t: Target) -> Tuple[Dict[str, Any], List[str]]:
     last_error = ""
     for _ in range(ATTEMPTS):
         try:
-            answer = client.generate_json(build_prompt(t, problems), package_schema(t.is_short, t.language), temperature=0.7)
+            answer = client.generate_json(build_prompt(t, problems), package_schema(t.is_short, t.language, t.analysis), temperature=0.7)
         except GeminiQuotaError as e:
             raise OptimizerError(str(e))  # waiting won't help
         except GeminiError as e:
@@ -382,6 +478,31 @@ def start_for_draft(conn, draft_id: int, row_number: Optional[int] = None) -> Li
     return ids
 
 
+def target_for_remote(conn, s) -> Target:
+    """A video on YouTube, from what the channel analysis read and found (context_json)."""
+    ctx = json.loads(s["context_json"])
+    live = ctx["live"]
+    channel = _channel_context(conn, s["channel_id"], s["video_id"])
+    # Nothing is added at upload any more: the description and tags are sent exactly as shown.
+    channel.update(footer="", default_tags=[], made_for_kids=bool(live.get("made_for_kids")))
+    v = conn.execute("SELECT content_json FROM videos WHERE id = ?", (s["video_id"],)).fetchone()
+    content = json.loads(v["content_json"]) if v and v["content_json"] else {}
+    return Target(title=live["title"], description=live["description"], tags=list(live["tags"]), is_short=bool(s["is_short"]),
+                  content=_summary(content.get("intro") or {}, content.get("slides") or []), analysis=True,
+                  findings=ctx.get("findings", []), channel_findings=ctx.get("channel_findings", []), **channel)
+
+
+def insert_remote(conn, audit_id: int, channel_id: int, model: str, video_id: int, live: Dict[str, Any], is_short: bool,
+                  findings: List[str], channel_findings: List[str]) -> int:
+    language = channel_setup.defaults(conn, channel_id)["language"]
+    context = {"live": live, "findings": findings, "channel_findings": channel_findings}
+    return conn.execute(
+        "INSERT INTO video_suggestions (channel_id, video_id, audit_id, model, status, language, made_for_kids, is_short, context_json, created_at) "
+        "VALUES (?,?,?,?,?,?,?,?,?,?)",
+        (channel_id, video_id, audit_id, model, "generating", language, int(bool(live.get("made_for_kids"))), int(is_short),
+         json.dumps(context, ensure_ascii=False), timeutil.fmt(timeutil.now_local()))).lastrowid
+
+
 def start_for_video(conn, video_id: int) -> int:
     v = conn.execute("SELECT channel_id, status, youtube_video_id FROM videos WHERE id = ?", (video_id,)).fetchone()
     if not v:
@@ -421,6 +542,12 @@ def run(ids: List[int], client=None, live_kids=live_made_for_kids) -> None:
     with _run_lock:
         conn = db.connect()
         own = None
+
+        def _own():
+            nonlocal own
+            own = Gemini(ai_drafts.api_key(), s["model"])
+            return own
+
         try:
             kids_by_channel: Dict[int, Optional[bool]] = {}
             for sid in ids:
@@ -428,6 +555,12 @@ def run(ids: List[int], client=None, live_kids=live_made_for_kids) -> None:
                 if not s or s["status"] != "generating":
                     continue
                 try:
+                    if s["context_json"]:  # a video on YouTube: its own live Made for Kids setting is already known
+                        package, warnings = generate_package(client or own or _own(), target_for_remote(conn, s))
+                        conn.execute("UPDATE video_suggestions SET status = 'ready', package_json = ?, warnings_json = ?, error = NULL WHERE id = ?",
+                                     (json.dumps(package, ensure_ascii=False), json.dumps(warnings, ensure_ascii=False), sid))
+                        conn.commit()
+                        continue
                     t = target_for_draft_row(conn, s["draft_id"], s["draft_row"]) if s["draft_id"] else target_for_video(conn, s["video_id"])
                     if s["channel_id"] not in kids_by_channel:
                         kids_by_channel[s["channel_id"]] = live_kids(conn, s["channel_id"])
@@ -468,6 +601,13 @@ def view(conn, s) -> Dict[str, Any]:
     out["package"] = json.loads(s["package_json"]) if s["package_json"] else None
     out["warnings"] = json.loads(s["warnings_json"] or "[]")
     out["blocked"] = metadata_apply.editable_problem(conn, s)
+    out["remote"] = metadata_apply.is_remote(s)
+    if out["remote"]:
+        ctx = json.loads(s["context_json"])
+        out["findings"] = ctx.get("findings", [])
+        out["youtube_video_id"] = ctx["live"]["id"]
+        out["video_title"] = ctx["live"]["title"]
+        out["recent"] = metadata_apply.recent_change(conn, ctx["live"]["id"])
     if out["blocked"]:
         return out
     out["current"] = metadata_apply.current(conn, s)
@@ -480,6 +620,17 @@ def view(conn, s) -> Dict[str, Any]:
     if s["before_json"]:
         out["before"] = json.loads(s["before_json"])
     return out
+
+
+def restart(conn, suggestion_id: int) -> None:
+    """Ask Gemini again for a suggestion that's ready or failed (not one already applied)."""
+    s = get(conn, suggestion_id)
+    if s["status"] not in ("ready", "failed"):
+        raise ActionError("Roll back the applied change first, then ask again." if s["status"] == "applied" else "Gemini is already writing this one.")
+    model = _model(conn)
+    conn.execute("UPDATE video_suggestions SET status = 'generating', model = ?, error = NULL WHERE id = ?", (model, suggestion_id))
+    conn.commit()
+    threading.Thread(target=run, args=([suggestion_id],), daemon=True).start()
 
 
 def for_draft(conn, draft_id: int) -> Dict[int, Dict[str, Any]]:

@@ -16,7 +16,7 @@ class FakeRequest:
     def __init__(self, result=None, error=None, chunks=None):
         self.result, self.error, self.chunks = result, error, list(chunks or [])
 
-    def execute(self):
+    def execute(self, num_retries=0):
         if self.error:
             raise self.error
         return self.result

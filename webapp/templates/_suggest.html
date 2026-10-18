@@ -1,13 +1,19 @@
-{# The AI Optimizer's Suggestions panel for one video: ask, wait, review before/after, approve, undo. #}
+{# The AI Optimizer's Suggestions panel for one video: ask, wait, review before/after, approve, undo or roll back.
+   A suggestion from the channel analysis (s.remote) changes the video on YouTube; any other changes the hub only. #}
 {% macro panel(s, suggest_url, row=none) -%}
-<div class="suggest" {% if s and s.status == 'generating' %}data-suggest-poll="{{ s.id }}"{% endif %}>
+<div class="suggest" {% if s %}id="s-{{ s.id }}"{% endif %} {% if s and s.status == 'generating' %}data-suggest-poll="{{ s.id }}"{% endif %}>
   <div class="suggest-head">
     <h3>Suggestions</h3>
     {% if s and s.status == 'generating' %}<span class="chip accent spin"><span class="i"></span>Gemini is writing</span>
-    {% elif s and s.status == 'applied' %}<span class="chip good"><span class="i">✓</span>Applied {{ s.applied_at | when }}</span>
+    {% elif s and s.status == 'applied' %}<span class="chip good"><span class="i">✓</span>{{ 'Live on YouTube since' if s.remote else 'Applied' }} {{ s.applied_at | when }}</span>
     {% elif s and s.status == 'ready' %}<span class="chip accent"><span class="i">★</span>Ready to review</span>
     {% elif s and s.status == 'failed' %}<span class="chip critical"><span class="i">✕</span>Failed</span>{% endif %}
+    {% if s and s.package and s.package.health_score is not none %}<span class="score-pill" title="Gemini's score for this video, 0-100">{{ s.package.health_score }}/100</span>{% endif %}
   </div>
+
+  {% if s and s.remote and s.findings %}
+  <ul class="findings-mini">{% for f in s.findings %}<li>{{ f }}</li>{% endfor %}</ul>
+  {% endif %}
 
   {% if s and s.blocked %}
     <p class="muted">{{ s.blocked }}</p>
@@ -26,8 +32,27 @@
     <p class="muted suggest-meta">Written in {{ {'hi': 'Hindi: Devanagari titles, Roman tags'}.get(s.language, s.language) }}{{ ' · Made for Kids rules (no comment or bell CTAs)' if s.made_for_kids }}{{ ' · Short' if s.is_short }} · {{ s.model }}</p>
     {% if s.warnings %}<div class="notice">{% for w in s.warnings %}<div>{{ w }}</div>{% endfor %}</div>{% endif %}
 
+    {% if p.summary is defined %}
+    <div class="analysis-box">
+      <p>{{ p.summary }}</p>
+      {% if p.too_little_data %}<p class="muted small">Not enough data yet to say why this video gets few views; the suggestions below only improve how it can be found.</p>
+      {% elif p.reasons %}
+      <h4>Reasons for low reach</h4>
+      <ul>{% for r in p.reasons %}<li>{{ r.reason }} <span class="num-tag">{{ r.number }}</span></li>{% endfor %}</ul>
+      {% endif %}
+      {% if p.actions %}
+      <h4>What to do, most impact first</h4>
+      <ol>{% for a in p.actions %}<li>{{ a }}</li>{% endfor %}</ol>
+      {% endif %}
+      {% if p.ideas %}
+      <h4>Follow-up video ideas</h4>
+      <ul>{% for i in p.ideas %}<li><strong>{{ i.title }}</strong>{% if i.why %} <span class="muted">· {{ i.why }}</span>{% endif %}</li>{% endfor %}</ul>
+      {% endif %}
+    </div>
+    {% endif %}
+
     {% if p.why %}
-    <div class="suggest-why"><strong>Why</strong><ul>{% for w in p.why %}<li>{{ w }}</li>{% endfor %}</ul></div>
+    <div class="suggest-why"><strong>Why these words</strong><ul>{% for w in p.why %}<li>{{ w }}</li>{% endfor %}</ul></div>
     {% endif %}
 
     <form method="post" action="/suggestions/{{ s.id }}/apply" class="suggest-form" data-suggest-form
@@ -52,7 +77,7 @@
 
       <div class="before-after">
         <div>
-          <h4>Before</h4>
+          <h4>{{ 'Live on YouTube now' if s.remote else 'Before' }}</h4>
           <div class="ba-title">{{ pv.before.title or '—' }}</div>
           <pre class="ba-text">{{ pv.before.description or '(no description)' }}</pre>
           <div class="ba-tags">{{ pv.before.tags | join(', ') or '(no tags)' }}</div>
@@ -68,14 +93,20 @@
       {% if pv.problems %}<div class="notice bad">{% for e in pv.problems %}<div>{{ e }}</div>{% endfor %}</div>{% endif %}
       <div class="notice bad" data-limit-problems hidden></div>
 
-      <label class="approve"><input type="checkbox" name="approve" value="yes" required> I've read the before and after and approve this change.</label>
+      {% if s.remote and s.recent %}
+      <div class="notice warn">This video's metadata was {{ 'rolled back' if s.recent.action == 'rollback' else 'changed' }} on {{ s.recent.created_at | when }}, less than 7 days ago. Changing it again so soon makes it impossible to tell which change helped.
+        <label class="approve"><input type="checkbox" name="confirm_recent" value="yes"> Change it anyway</label>
+      </div>
+      {% endif %}
+      <label class="approve"><input type="checkbox" name="approve" value="yes" required> I've read the before and after and approve this change{{ ' on YouTube' if s.remote }}.</label>
       <div class="actions" style="justify-content:flex-start">
-        <button class="btn primary" type="submit" data-apply>{{ 'Apply again' if s.status == 'applied' else 'Apply' }}</button>
+        <button class="btn primary" type="submit" data-apply>{% if s.remote %}Apply to YouTube{% else %}{{ 'Apply again' if s.status == 'applied' else 'Apply' }}{% endif %}</button>
+        {% if s.remote %}<span class="muted small">Changes only the title, description and tags (about 51 of the 10,000 daily quota units). Privacy and Made for Kids stay as they are.</span>{% endif %}
       </div>
     </form>
     {% if s.status == 'applied' %}
-    <form method="post" action="/suggestions/{{ s.id }}/undo" onsubmit="return confirm('Put back the title, description and tags from before Apply?')" class="undo-form">
-      <button class="btn" type="submit">Undo: restore the previous version</button>
+    <form method="post" action="/suggestions/{{ s.id }}/undo" onsubmit="return confirm('{{ 'Put the previous title, description and tags back on YouTube?' if s.remote else 'Put back the title, description and tags from before Apply?' }}')" class="undo-form">
+      <button class="btn" type="submit">{{ 'Roll back on YouTube' if s.remote else 'Undo: restore the previous version' }}</button>
       {% if s.before %}<span class="muted small">Previous title: {{ s.before.title }}</span>{% endif %}
     </form>
     {% endif %}
@@ -93,11 +124,46 @@
     </div>
     {% endif %}
 
+    {% if s.status != 'applied' %}
     <form method="post" action="{{ suggest_url }}" class="regen">
       {% if row %}<input type="hidden" name="row" value="{{ row }}">{% endif %}
       <button class="btn small" type="submit">Ask Gemini again</button>
       <span class="muted small">Better metadata can help the right viewers find a video; it doesn't guarantee views.</span>
     </form>
+    {% endif %}
   {% endif %}
 </div>
+{%- endmacro %}
+
+{# Every change the optimizer made on YouTube, with one-click rollback of the newest one per video. #}
+{% macro change_log(changes, back) -%}
+<section class="card section" id="changes">
+  <div class="card-head"><h2>Changes on YouTube</h2><span class="muted">backup and log of every title, description and tags change</span></div>
+  {% if changes %}
+  <div class="change-list">
+  {% for c in changes %}
+    <div class="change">
+      <div class="change-head">
+        <span class="chip {{ 'good' if c.status == 'applied' and c.action == 'apply' else 'critical' if c.status == 'failed' else '' }}"><span class="i">{{ '↺' if c.action == 'rollback' else '✓' if c.status == 'applied' else '✕' if c.status == 'failed' else '•' }}</span>{{ 'Rollback' if c.action == 'rollback' else {'applied': 'Live', 'rolled_back': 'Rolled back', 'failed': 'Failed', 'pending': 'Pending'}.get(c.status, c.status) }}</span>
+        <strong class="clip" title="{{ c.video_title }}">{{ c.video_title or c.youtube_video_id }}</strong>
+        <span class="muted small">{{ c.created_at | when }} · {{ c.fields | map(attribute='field') | join(', ') }}</span>
+        {% if c.can_rollback %}
+        <form method="post" action="/changes/{{ c.group }}/rollback" onsubmit="return confirm('Put the previous version back on YouTube?')">
+          <input type="hidden" name="back" value="{{ back }}">
+          <button class="btn small" type="submit">Roll back</button>
+        </form>
+        {% endif %}
+      </div>
+      {% if c.error %}<div class="muted small" style="color:var(--critical-ink)">{{ c.error }}</div>{% endif %}
+      <details><summary class="muted small">Old and new values</summary>
+        <dl class="kv change-values">{% for f in c.fields %}
+          <dt>{{ f.field }} before</dt><dd>{{ f.old | join(', ') if f.field == 'tags' else f.old }}</dd>
+          <dt>{{ f.field }} after</dt><dd>{{ f.new | join(', ') if f.field == 'tags' else f.new }}</dd>
+        {% endfor %}</dl>
+      </details>
+    </div>
+  {% endfor %}
+  </div>
+  {% else %}<div class="empty">No changes on YouTube yet. Approved suggestions from the analysis show up here, with their backups.</div>{% endif %}
+</section>
 {%- endmacro %}

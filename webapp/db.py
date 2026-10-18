@@ -119,6 +119,38 @@ CREATE TABLE IF NOT EXISTS video_suggestions (
     created_at TEXT NOT NULL,
     applied_at TEXT
 );
+CREATE TABLE IF NOT EXISTS channel_audits (
+    id INTEGER PRIMARY KEY,
+    channel_id INTEGER NOT NULL REFERENCES channels(id) ON DELETE CASCADE,
+    status TEXT NOT NULL,              -- running | ready | failed
+    period_days INTEGER NOT NULL,
+    video_limit INTEGER NOT NULL,      -- videos to write suggestions for; 0 = all
+    score INTEGER,                     -- 0-100 from the rule-based checks; NULL = not enough data
+    report_json TEXT,                  -- findings, numbers, traffic, per-video rows
+    error TEXT,
+    started_at TEXT NOT NULL,
+    finished_at TEXT
+);
+CREATE INDEX IF NOT EXISTS channel_audits_channel ON channel_audits(channel_id, started_at);
+CREATE TABLE IF NOT EXISTS metadata_changes (
+    id INTEGER PRIMARY KEY,
+    change_group TEXT NOT NULL,        -- one Apply or Rollback; every field it touched shares this
+    action TEXT NOT NULL,              -- apply | rollback
+    channel_id INTEGER NOT NULL REFERENCES channels(id) ON DELETE CASCADE,
+    video_id INTEGER REFERENCES videos(id) ON DELETE SET NULL,
+    youtube_video_id TEXT NOT NULL,
+    suggestion_id INTEGER REFERENCES video_suggestions(id) ON DELETE SET NULL,
+    field TEXT NOT NULL,               -- title | description | tags (tags as a JSON list)
+    old_value TEXT NOT NULL,           -- the backup: exactly what YouTube had before
+    new_value TEXT NOT NULL,
+    status TEXT NOT NULL,              -- pending | applied | failed | rolled_back
+    error TEXT,
+    created_at TEXT NOT NULL,
+    rolled_back_at TEXT,
+    rolled_back_by TEXT                -- change_group of the rollback
+);
+CREATE INDEX IF NOT EXISTS metadata_changes_video ON metadata_changes(youtube_video_id, created_at);
+CREATE INDEX IF NOT EXISTS metadata_changes_group ON metadata_changes(change_group);
 CREATE INDEX IF NOT EXISTS video_suggestions_video ON video_suggestions(video_id);
 CREATE INDEX IF NOT EXISTS video_suggestions_draft ON video_suggestions(draft_id, draft_row);
 CREATE TABLE IF NOT EXISTS settings (
@@ -131,6 +163,9 @@ CREATE TABLE IF NOT EXISTS settings (
 MIGRATIONS = {
     "videos": [("youtube_video_id", "TEXT"), ("upload_progress", "REAL")],
     "channels": [("last_synced_at", "TEXT"), ("setup_json", "TEXT"), ("angle", "TEXT"), ("google_account", "TEXT")],
+    # audit_id: the channel analysis that asked for it; context_json: the video's live metadata and
+    # findings at analysis time; change_group: its latest change on YouTube (metadata_changes).
+    "video_suggestions": [("audit_id", "INTEGER"), ("context_json", "TEXT"), ("change_group", "TEXT")],
 }
 
 

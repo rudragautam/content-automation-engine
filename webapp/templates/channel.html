@@ -1,5 +1,6 @@
 {% extends "base.html" %}
 {% from "_macros.html" import delta_short, connection, delta, range_filter, queue_row, status, pager %}
+{% from "_suggest.html" import change_log %}
 {% block title %}{{ channel.name }}{% endblock %}
 {% block content %}
 <div class="page-head">
@@ -61,6 +62,38 @@
     <p class="muted" style="margin-top:10px;font-size:12px">Clear a time to remove that slot, then save.</p>
   </section>
 </div>
+
+{% if not channel.is_mock and channel.youtube_channel_id %}
+<section class="card section" id="analysis">
+  <div class="card-head"><h2>AI Optimizer</h2><span class="muted">why videos get few views, and what to change</span></div>
+  {% if audit and audit.status == 'running' %}
+    <p><span class="chip accent spin"><span class="i"></span>Analysing</span> <a href="/channels/{{ channel.id }}/analysis/{{ audit.id }}">Open the analysis</a></p>
+  {% elif audit and audit.status == 'ready' %}
+    <div class="audit-summary">
+      <div class="score-big">{{ audit.score ~ '/100' if audit.score is not none else '—' }}<span class="muted small">{{ 'health' if audit.score is not none else 'not enough data yet' }}</span></div>
+      <div>
+        <p class="muted small">Last analysis {{ audit.finished_at | when }}</p>
+        <ul class="findings-mini">{% for f in audit.report.findings if f.severity != 'info' %}{% if loop.index <= 3 %}<li><strong>{{ f.title }}</strong></li>{% endif %}{% else %}<li>No problems found by the checks.</li>{% endfor %}</ul>
+        <a class="btn small" href="/channels/{{ channel.id }}/analysis/{{ audit.id }}">Open report and suggestions</a>
+      </div>
+    </div>
+  {% elif audit and audit.status == 'failed' %}
+    <div class="notice bad">The last analysis failed: {{ audit.error }}</div>
+  {% else %}
+    <p class="secondary">Reads this channel's analytics from YouTube (read-only), runs fixed checks with real numbers, then asks Gemini for better titles, descriptions and tags for the weakest videos. Nothing changes on YouTube until you approve it.</p>
+  {% endif %}
+  {% if not audit or audit.status != 'running' %}
+  <form method="post" action="/channels/{{ channel.id }}/analysis" class="form-row" style="margin-top:10px">
+    <select name="video_limit" aria-label="Videos to write suggestions for">
+      <option value="10">Suggestions for the 10 weakest videos</option>
+      <option value="0">Suggestions for every video</option>
+    </select>
+    <button class="btn primary" type="submit" {{ 'disabled title="Connect the channel first"' if channel.connection != 'connected' }}>Run analysis</button>
+  </form>
+  {% endif %}
+</section>
+{{ change_log(changes, '/channels/' ~ channel.id) }}
+{% endif %}
 
 <section class="card section" id="queue">
   <div class="card-head"><h2>Queue and schedule</h2><a href="/content?niche={{ channel.niche }}">Add content</a></div>

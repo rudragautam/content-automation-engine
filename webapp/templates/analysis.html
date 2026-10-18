@@ -1,0 +1,92 @@
+{% extends "base.html" %}
+{% from "_suggest.html" import panel, change_log %}
+{% block title %}Analysis · {{ channel.name }}{% endblock %}
+{% block content %}
+{% set r = audit.report %}
+<div class="page-head">
+  <div>
+    <div class="muted" style="font-size:12.5px"><a href="/channels/{{ channel.id }}#analysis">{{ channel.name }}</a> /</div>
+    <h1>Channel analysis</h1>
+    <div class="sub">{{ audit.started_at | when }}{% if r %} · numbers for the last {{ r.period }} days, per video the last {{ r.video_days }} days{% endif %}</div>
+  </div>
+  <form method="post" action="/channels/{{ channel.id }}/analysis" class="form-row">
+    <select name="video_limit" aria-label="Videos to write suggestions for">
+      <option value="10">Suggestions for the 10 weakest videos</option>
+      <option value="0">Suggestions for every video</option>
+    </select>
+    <button class="btn" type="submit" {{ 'disabled' if audit.status == 'running' }}>Run again</button>
+  </form>
+</div>
+{% if notice %}<div class="notice ok">{{ notice }}</div>{% endif %}
+{% if problem %}<div class="notice bad">{{ problem }}</div>{% endif %}
+
+{% if audit.status == 'running' %}
+<section class="card" data-analysis-poll="{{ audit.id }}">
+  <p><span class="chip accent spin"><span class="i"></span>Analysing</span> Syncing {{ channel.name }} and reading its analytics from YouTube. This page updates by itself; it usually takes under a minute.</p>
+</section>
+{% elif audit.status == 'failed' %}
+<section class="card"><div class="notice bad">{{ audit.error }}</div><p class="secondary">Nothing was changed on YouTube.</p></section>
+{% else %}
+{% set n = r.numbers %}
+<div class="tiles">
+  <div class="tile"><div class="label">Channel health (rules)</div><div class="value">{{ audit.score ~ '/100' if audit.score is not none else '—' }}</div><div class="delta">{{ 'not enough data yet' if audit.score is none else 'from the checks below' }}</div></div>
+  <div class="tile"><div class="label">Views</div><div class="value">{{ n.views | compact }}</div><div class="delta">last {{ r.period }} days</div></div>
+  <div class="tile"><div class="label">Average % viewed</div><div class="value">{{ ('%.0f%%' % n.avg_view_pct) if n.avg_view_pct is not none else '—' }}</div><div class="delta">{{ r.rated_videos }} videos with enough views</div></div>
+  <div class="tile"><div class="label">From YouTube's recommendations</div><div class="value">{{ '%.0f%%' % n.recommended_pct }}</div><div class="delta">Browse, Suggested, Shorts feed</div></div>
+  <div class="tile"><div class="label">From search</div><div class="value">{{ '%.0f%%' % n.search_pct }}</div><div class="delta">YouTube search</div></div>
+  <div class="tile"><div class="label">Likes per 1,000 views</div><div class="value">{{ n.likes_per_1000 }}</div><div class="delta">videos with enough views</div></div>
+</div>
+
+<div class="grid cols-3">
+  <section class="card span-2">
+    <div class="card-head"><h2>What the checks found</h2><span class="muted">rule-based, no AI</span></div>
+    <div class="findings">
+    {% for f in r.findings %}
+      <div class="finding sev-{{ f.severity }}">
+        <div class="finding-head"><span class="chip {{ {'high': 'critical', 'medium': 'warning', 'low': '', 'info': 'accent'}[f.severity] }}"><span class="i">{{ {'high': '!', 'medium': '!', 'low': '·', 'info': 'i'}[f.severity] }}</span>{{ {'high': 'High', 'medium': 'Medium', 'low': 'Low', 'info': 'Note'}[f.severity] }}</span><strong>{{ f.title }}</strong></div>
+        <p class="secondary">{{ f.detail }}</p>
+        {% if f.numbers %}<div class="num-chips">{% for k, v in f.numbers.items() %}<span class="num-tag">{{ k }}: {{ v }}</span>{% endfor %}</div>{% endif %}
+      </div>
+    {% endfor %}
+    </div>
+  </section>
+  <section class="card">
+    <div class="card-head"><h2>Where views come from</h2><span class="muted">last {{ r.period }} days</span></div>
+    {% set total = r.traffic.values() | sum %}
+    {% if total %}
+    <div class="bars">
+      {% for k, v in r.traffic.items() | sort(attribute='1', reverse=true) %}
+      <div class="bar-row"><span class="bl" title="{{ k }}">{{ names.get(k, k.replace('_', ' ').title()) }}</span><span class="bt"><span class="bf" style="width:{{ (v / total * 100) | round(1) }}%; display:block"></span></span><span class="bv">{{ (v / total * 100) | round | int }}%</span></div>
+      {% endfor %}
+    </div>
+    {% else %}<div class="empty">No views in this period.</div>{% endif %}
+    <h3 style="margin-top:16px">Impressions and click-through rate</h3>
+    {% if r.reach %}
+      <p>{{ r.reach.impressions | compact }} impressions · {{ r.reach.ctr_pct }}% click-through rate</p>
+    {% else %}
+      <p class="muted small">Not available yet. YouTube's Analytics API doesn't serve impressions or CTR; they come from the YouTube Reporting API, which needs a reporting job set up once per channel and sends its first data about 48 hours later. Until then, use the Reach tab in YouTube Studio.</p>
+    {% endif %}
+  </section>
+</div>
+
+<section class="card section" id="videos">
+  <div class="card-head"><h2>Suggestions per video</h2><span class="muted">{{ audit.suggestions | length }} videos{% if audit.writing %} · Gemini is writing {{ audit.writing }} more{% endif %}</span></div>
+  {% if r.gemini_note %}<div class="notice">{{ r.gemini_note }}</div>{% endif %}
+  <p class="muted small">Weakest videos first (fewest views per day since publishing). One Gemini request per video, sent only the numbers above. Nothing changes on YouTube until you approve a change.</p>
+  {% for s in audit.suggestions %}
+  <article class="video-card">
+    <div class="video-card-head">
+      <strong>{{ s.video_title }}</strong>
+      {% if s.youtube_video_id %}<a class="btn small" href="https://studio.youtube.com/video/{{ s.youtube_video_id }}/edit" target="_blank" rel="noopener">Open in Studio</a>{% endif %}
+    </div>
+    {{ panel(s, '/suggestions/' ~ s.id ~ '/regenerate') }}
+  </article>
+  {% else %}
+  <div class="empty">{{ 'No suggestions: add a Gemini key in Settings and run again.' if r.gemini_note else 'No public videos to suggest for yet.' }}</div>
+  {% endfor %}
+</section>
+{% endif %}
+
+{{ change_log(changes, '/channels/' ~ channel.id ~ '/analysis/' ~ audit.id) }}
+<p class="muted small section">The AI can't change what's inside a video that is already uploaded (hook, visuals, audio); it can improve the title, description and tags, and advise on future videos. Better metadata can improve reach but doesn't guarantee views.</p>
+{% endblock %}

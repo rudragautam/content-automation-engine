@@ -137,11 +137,19 @@ def load_credentials(path: str):
     return creds
 
 
+HTTP_TIMEOUT = 300  # seconds; long enough for an 8 MB upload chunk on a slow line, short enough not to hang forever
+
+
 def build_services(creds):
+    import google_auth_httplib2
+    import httplib2
     from googleapiclient.discovery import build
 
-    youtube = build("youtube", "v3", credentials=creds, cache_discovery=False)
-    analytics = build("youtubeAnalytics", "v2", credentials=creds, cache_discovery=False)
+    def http():
+        return google_auth_httplib2.AuthorizedHttp(creds, http=httplib2.Http(timeout=HTTP_TIMEOUT))
+
+    youtube = build("youtube", "v3", http=http(), cache_discovery=False)
+    analytics = build("youtubeAnalytics", "v2", http=http(), cache_discovery=False)
     return youtube, analytics
 
 
@@ -413,6 +421,103 @@ def recent_videos(youtube, uploads_playlist: str, limit: int = 50) -> List[Dict[
     return out
 
 
+# ---------- per-video details and metadata edits (AI Optimizer) ----------
+# Edits send only the snippet part: status (privacy, Made for Kids) is never part of the body,
+# so YouTube leaves it exactly as it is.
+
+READ_RETRIES = 2  # reads and snippet updates are idempotent, so 5xx and rate-limit errors are retried
+
+
+def video_details(youtube, ids: List[str]) -> Dict[str, Dict[str, Any]]:
+    """Live title, description, tags and settings of each video, 50 per request (1 unit each)."""
+    out: Dict[str, Dict[str, Any]] = {}
+    ids = [i for i in dict.fromkeys(ids) if i]
+    for start in range(0, len(ids), 50):
+        res = _call(youtube.videos().list(part="snippet,status,contentDetails,statistics", id=",".join(ids[start:start + 50])), retries=READ_RETRIES)
+        for v in res.get("items") or []:
+            sn, st, stats = v.get("snippet", {}), v.get("status", {}), v.get("statistics", {})
+            out[v["id"]] = {
+                "id": v["id"],
+                "title": sn.get("title", ""),
+                "description": sn.get("description", ""),
+                "tags": list(sn.get("tags") or []),
+                "category_id": sn.get("categoryId"),
+                "default_language": sn.get("defaultLanguage"),
+                "default_audio_language": sn.get("defaultAudioLanguage"),
+                "published_at": sn.get("publishedAt"),
+                "privacy": st.get("privacyStatus"),
+                "made_for_kids": bool(st.get("madeForKids") or st.get("selfDeclaredMadeForKids")),
+                "duration_s": _iso_duration(v.get("contentDetails", {}).get("duration", "")),
+                "views": int(stats.get("viewCount", 0) or 0),
+                "likes": int(stats.get("likeCount", 0) or 0),
+                "comments": int(stats.get("commentCount", 0) or 0),
+            }
+    return out
+
+
+def update_video_metadata(youtube, live: Dict[str, Any], title: str, description: str, tags: List[str]) -> Dict[str, Any]:
+    """Replace a video's title, description and tags (50 units). `live` is its video_details() entry,
+    read just before, so the category and languages are kept as they are."""
+    title, description = _clean(title), _clean(description)
+    if not title:
+        raise YouTubeError("The video needs a title.")
+    if len(title) > TITLE_LIMIT or description_bytes(description) > DESCRIPTION_LIMIT or tags_length(tags) > TAGS_LIMIT:
+        raise YouTubeError("The title, description or tags are over YouTube's limits.")
+    if not live.get("category_id"):
+        raise YouTubeError("YouTube didn't say which category this video is in, so it can't be edited safely.")
+    snippet = {"title": title, "description": description, "tags": list(tags), "categoryId": live["category_id"]}
+    for key, field_name in (("default_language", "defaultLanguage"), ("default_audio_language", "defaultAudioLanguage")):
+        if live.get(key):
+            snippet[field_name] = live[key]
+    res = _call(youtube.videos().update(part="snippet", body={"id": live["id"], "snippet": snippet}), retries=READ_RETRIES)
+    sn = res.get("snippet", {})
+    return {"title": sn.get("title", title), "description": sn.get("description", description), "tags": list(sn.get("tags") or tags)}
+
+
+# ---------- channel analytics for the AI Optimizer ----------
+# All read-only, from the YouTube Analytics API (its quota is separate from the Data API's 10,000 units).
+
+def _report(analytics, start: dt.date, end: dt.date, **query) -> Dict[str, Any]:
+    return _call(analytics.reports().query(ids="channel==MINE", startDate=start.isoformat(), endDate=end.isoformat(), **query), retries=READ_RETRIES)
+
+
+def video_report(analytics, start: dt.date, end: dt.date, limit: int = 200) -> Dict[str, Dict[str, Any]]:
+    """Per-video numbers for the period, keyed by video ID."""
+    res = _report(analytics, start, end, dimensions="video", sort="-views", maxResults=min(limit, 200),
+                  metrics="views,estimatedMinutesWatched,averageViewDuration,averageViewPercentage,likes,shares,subscribersGained")
+    return {r[0]: {"views": int(r[1]), "watch_minutes": float(r[2]), "avg_view_s": float(r[3]), "avg_view_pct": float(r[4]),
+                   "likes": int(r[5]), "shares": int(r[6]), "subs_gained": int(r[7])} for r in res.get("rows") or []}
+
+
+def traffic_sources(analytics, start: dt.date, end: dt.date) -> Dict[str, int]:
+    """Views by traffic source type (YT_SEARCH, SHORTS, RELATED_VIDEO, SUBSCRIBER, EXT_URL, ...)."""
+    res = _report(analytics, start, end, dimensions="insightTrafficSourceType", metrics="views", sort="-views")
+    return {r[0]: int(r[1]) for r in res.get("rows") or []}
+
+
+def content_types(analytics, start: dt.date, end: dt.date) -> Dict[str, Dict[str, float]]:
+    """Views, watch time and % viewed split by Shorts / long-form / live."""
+    res = _report(analytics, start, end, dimensions="creatorContentType", metrics="views,estimatedMinutesWatched,averageViewPercentage")
+    return {str(r[0]).lower(): {"views": int(r[1]), "watch_minutes": float(r[2]), "avg_view_pct": float(r[3])} for r in res.get("rows") or []}
+
+
+def reach_metrics(analytics, start: dt.date, end: dt.date) -> Optional[Dict[str, Any]]:
+    """Impressions and click-through rate, if the API serves them; None when it doesn't.
+
+    Checked on a real channel on 2026-10-18: the Analytics API v2 answers "The query is not
+    supported" for videoThumbnailImpressions / videoThumbnailImpressionsClickRate. Those
+    numbers come only from the YouTube Reporting API (report type channel_reach_basic_a1),
+    which needs a reporting job created once per channel and delivers daily CSV files
+    about 48 hours later. This is where that source plugs in.
+    """
+    try:
+        res = _report(analytics, start, end, metrics="videoThumbnailImpressions,videoThumbnailImpressionsClickRate")
+    except YouTubeError:
+        return None
+    rows = res.get("rows") or []
+    return {"impressions": int(rows[0][0]), "ctr_pct": float(rows[0][1])} if rows else None
+
+
 def _iso_duration(value: str) -> Optional[float]:
     m = re.fullmatch(r"PT(?:(\d+)H)?(?:(\d+)M)?(?:(\d+)S)?", value or "")
     if not m:
@@ -423,17 +528,26 @@ def _iso_duration(value: str) -> Optional[float]:
 
 # ---------- errors ----------
 
-def _call(request, next_chunk: bool = False):
-    """Execute a request, turning Google's errors into ones the hub can act on."""
-    from google.auth.exceptions import RefreshError
+def _call(request, next_chunk: bool = False, retries: int = 0):
+    """Execute a request, turning Google's errors into ones the hub can act on.
+
+    `retries` > 0 lets the client library retry 5xx and rate-limit answers with backoff;
+    only for requests that are safe to repeat.
+    """
+    import httplib2
+    from google.auth.exceptions import RefreshError, TransportError
     from googleapiclient.errors import HttpError
 
     try:
-        return request.next_chunk() if next_chunk else request.execute()
+        if next_chunk:
+            return request.next_chunk()
+        return request.execute(num_retries=retries) if retries else request.execute()
     except RefreshError:
         raise NotAuthorized("YouTube sign-in expired or was revoked. Reconnect the channel.")
     except HttpError as e:
         raise _translate(e)
+    except (OSError, httplib2.HttpLib2Error, TransportError) as e:  # timeouts, DNS, dropped connections
+        raise YouTubeError(f"Couldn't reach YouTube ({type(e).__name__}). Check the internet connection and try again.")
 
 
 def _translate(error) -> YouTubeError:
