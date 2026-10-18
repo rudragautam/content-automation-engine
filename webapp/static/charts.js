@@ -68,7 +68,7 @@ export function lineChart(container, data, { height = 220, unit = "" } = {}) {
   function draw() {
     container.querySelector("svg")?.remove();
     const width = container.clientWidth || 600;
-    const m = { l: 44, r: 52, t: 12, b: 24 };
+    const m = { l: 54, r: 60, t: 14, b: 30 };
     const w = width - m.l - m.r, h = height - m.t - m.b;
     let lo = Math.min(0, ...values), hi = Math.max(...values);
     // Whole-number series (views, subscribers) never get fractional gridlines like 0.25.
@@ -81,7 +81,7 @@ export function lineChart(container, data, { height = 220, unit = "" } = {}) {
 
     const svg = el("svg", { viewBox: `0 0 ${width} ${height}`, height, tabindex: 0, role: "img", "aria-label": container.dataset.label || "Line chart" });
     for (let v = lo; v <= hi + 1e-9; v += step) {
-      el("line", { x1: m.l, x2: m.l + w, y1: y(v), y2: y(v), style: `stroke:${v === 0 ? "var(--axis)" : "var(--grid)"};stroke-width:1` }, svg);
+      el("line", { x1: m.l, x2: m.l + w, y1: y(v), y2: y(v), style: `stroke:${v === 0 ? "var(--chart-axis)" : "var(--chart-grid)"};stroke-width:1` }, svg);
       const t = el("text", { x: m.l - 8, y: y(v) + 4, "text-anchor": "end", class: "axis-text" }, svg); t.textContent = compact(v);
     }
     // As many date labels as fit without touching (about 72px each).
@@ -92,14 +92,14 @@ export function lineChart(container, data, { height = 220, unit = "" } = {}) {
       t.textContent = dayLabel(data[i].date);
     }
     const pts = data.map((d, i) => `${x(i).toFixed(1)},${y(d.value).toFixed(1)}`);
-    el("path", { d: `M${pts.join("L")}L${x(data.length - 1)},${y(Math.max(lo, 0))}L${x(0)},${y(Math.max(lo, 0))}Z`, style: "fill:var(--accent);fill-opacity:0.10;stroke:none" }, svg);
-    el("path", { d: `M${pts.join("L")}`, style: "fill:none;stroke:var(--accent);stroke-width:2;stroke-linejoin:round;stroke-linecap:round" }, svg);
+    el("path", { d: `M${pts.join("L")}L${x(data.length - 1)},${y(Math.max(lo, 0))}L${x(0)},${y(Math.max(lo, 0))}Z`, style: "fill:var(--chart-line);fill-opacity:0.16;stroke:none" }, svg);
+    el("path", { d: `M${pts.join("L")}`, style: "fill:none;stroke:var(--chart-line);stroke-width:3;stroke-linejoin:round;stroke-linecap:round" }, svg);
     const last = data.length - 1;
-    el("circle", { cx: x(last), cy: y(values[last]), r: 4, style: "fill:var(--accent);stroke:var(--surface);stroke-width:2" }, svg);
+    el("circle", { cx: x(last), cy: y(values[last]), r: 4, style: "fill:var(--chart-line);stroke:var(--chart-dot-ring);stroke-width:2" }, svg);
     const end = el("text", { x: x(last) + 8, y: y(values[last]) + 4, class: "end-label" }, svg); end.textContent = fmt(values[last]);
 
-    const cross = el("line", { y1: m.t, y2: m.t + h, style: "stroke:var(--axis);stroke-width:1;opacity:0" }, svg);
-    const dot = el("circle", { r: 4, style: "fill:var(--accent);stroke:var(--surface);stroke-width:2;opacity:0" }, svg);
+    const cross = el("line", { y1: m.t, y2: m.t + h, style: "stroke:var(--chart-axis);stroke-width:1;opacity:0" }, svg);
+    const dot = el("circle", { r: 4, style: "fill:var(--chart-line);stroke:var(--chart-dot-ring);stroke-width:2;opacity:0" }, svg);
     const tip = tooltipFor(container);
     let current = -1;
     const show = (i) => {
@@ -187,7 +187,7 @@ export function heatmap(container, data) {
   legend.append(document.createTextNode("Fewer views"));
   for (let i = 0; i < bins; i++) { const s = document.createElement("span"); s.className = "sw"; s.style.background = `var(--heat-${i})`; legend.appendChild(s); }
   legend.append(document.createTextNode("More views"));
-  if (best) { const b = document.createElement("strong"); b.style.marginLeft = "auto"; b.style.color = "var(--ink)"; b.textContent = `Best slot: ${best.label} (${compact(best.v)} avg)`; legend.appendChild(b); }
+  if (best) { const b = document.createElement("strong"); b.style.marginLeft = "auto"; b.style.color = "var(--text)"; b.textContent = `Best slot: ${best.label} (${compact(best.v)} avg)`; legend.appendChild(b); }
   container.appendChild(legend);
   const rows = [];
   data.rows.forEach((r, i) => data.cols.forEach((c, j) => { if (data.values[i][j] !== null) rows.push([`${r} ${c}`, compact(data.values[i][j]), String(data.counts[i][j])]); }));
@@ -200,7 +200,7 @@ export function sparkline(container, values) {
   const x = (i) => 2 + (i / (values.length - 1)) * (w - 6), y = (v) => h - 3 - ((v - lo) / (hi - lo || 1)) * (h - 6);
   const svg = el("svg", { viewBox: `0 0 ${w} ${h}`, class: "spark", "aria-hidden": "true" });
   el("path", { d: "M" + values.map((v, i) => `${x(i).toFixed(1)},${y(v).toFixed(1)}`).join("L"), style: "fill:none;stroke:var(--muted);stroke-width:1.5;stroke-linejoin:round;stroke-linecap:round" }, svg);
-  el("circle", { cx: x(values.length - 1), cy: y(values[values.length - 1]), r: 2.5, style: "fill:var(--accent)" }, svg);
+  el("circle", { cx: x(values.length - 1), cy: y(values[values.length - 1]), r: 2.5, style: "fill:var(--chart-line)" }, svg);
   container.appendChild(svg);
 }
 

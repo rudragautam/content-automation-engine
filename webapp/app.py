@@ -15,7 +15,7 @@ from markupsafe import Markup
 
 from content_templates import NICHES, workbook_bytes
 from publishing.youtube import ABOUT_LIMIT as YT_ABOUT_LIMIT, YouTubeError
-from webapp import ai_drafts, analytics, channel_art, channel_audit, channel_names, channel_setup, db, metadata_apply, mock, optimizer, optimizer_checks, queue, scope, timeutil, youtube_sync
+from webapp import ai_drafts, analytics, channel_art, channel_audit, channel_names, channel_setup, db, metadata_apply, mock, optimizer, optimizer_checks, queue, scope, shell, themes, timeutil, youtube_sync
 from webapp.paging import paginate
 from webapp.queue import ActionError
 
@@ -82,13 +82,16 @@ templates.env.globals["renderable"] = {n for n in NICHES if queue.can_render(n)}
 
 
 def page(request: Request, name: str, **ctx):
+    active = ctx.pop("active_override", None) or name.split(".")[0]
     with db.session() as conn:
         ctx.setdefault("alert_count", len(analytics.alerts(conn)))
         ctx.setdefault("mock_count_global", conn.execute("SELECT COUNT(*) FROM channels WHERE is_mock = 1").fetchone()[0])
-    active = ctx.pop("active_override", None) or name.split(".")[0]
-    response = templates.TemplateResponse(request, name, {"active": active, "ranges": RANGES, **ctx})
+        frame = shell.context(conn, request, active, ctx)
+    response = templates.TemplateResponse(request, name, {"active": active, "ranges": RANGES, **frame, **ctx})
     if "scope" in ctx:
         scope.keep(ctx["scope"], response)
+    elif frame["remember_channel"]:
+        shell.remember(response, frame["picked_channel"])
     return response
 
 
@@ -841,6 +844,21 @@ def api_sync(channel_id: int):
         return {"synced": True, **result}
     except ActionError as e:
         return error(e)
+
+
+@app.post("/api/channels/{channel_id}/theme")
+async def api_theme(channel_id: int, request: Request):
+    """The channel's colour palette, picked with the swatches in the top bar or the setup window."""
+    try:
+        body = await request.json()
+    except ValueError:
+        return error("Send the palette as JSON.")
+    try:
+        with db.session() as conn:
+            theme = themes.set_theme(conn, channel_id, str((body or {}).get("theme", "")))
+        return {"theme": theme}
+    except ActionError as e:
+        return error(e, 404 if "not found" in str(e) else 400)
 
 
 @app.post("/api/channels/{channel_id}/disconnect")

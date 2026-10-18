@@ -1,16 +1,7 @@
 import { mountAll } from "./charts.js";
+import { confirmDialog, toast } from "./js/shell.js";
 
-const toastEl = document.createElement("div");
-toastEl.className = "toast";
-toastEl.setAttribute("role", "status");
-document.body.appendChild(toastEl);
-let toastTimer;
-export function toast(text) {
-  toastEl.textContent = text;
-  toastEl.classList.add("show");
-  clearTimeout(toastTimer);
-  toastTimer = setTimeout(() => toastEl.classList.remove("show"), 3200);
-}
+export { toast };
 
 async function post(url, body) {
   const res = await fetch(url, { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify(body || {}) });
@@ -19,14 +10,6 @@ async function post(url, body) {
   return data;
 }
 
-// Theme: OS setting by default, toggle stored per browser.
-const root = document.documentElement;
-try { const t = localStorage.getItem("hub-theme"); if (t) root.dataset.theme = t; } catch (e) {}
-document.getElementById("theme-toggle")?.addEventListener("click", () => {
-  const dark = root.dataset.theme ? root.dataset.theme === "dark" : matchMedia("(prefers-color-scheme: dark)").matches;
-  root.dataset.theme = dark ? "light" : "dark";
-  try { localStorage.setItem("hub-theme", root.dataset.theme); } catch (e) {}
-});
 
 document.addEventListener("click", async (e) => {
   const btn = e.target.closest("[data-action]");
@@ -70,16 +53,16 @@ document.addEventListener("click", async (e) => {
       toast(`Synced ${res.days} days of stats and ${res.videos} videos`);
       setTimeout(() => location.reload(), 900);
     } else if (action === "disconnect") {
-      if (!confirm("Disconnect this channel? Uploads stop until you connect it again.")) return;
+      if (!(await confirmDialog({ title: "Disconnect this channel?", text: "Uploads to it stop until you connect it again.", ok: "Disconnect", danger: true }))) return;
       await post(`/api/channels/${btn.dataset.channel}/disconnect`);
       location.reload();
     } else if (action === "delete-video") {
-      if (!confirm("Remove this video from the queue?")) return;
+      if (!(await confirmDialog({ title: "Remove this video from the queue?", text: row.querySelector(".cell-title")?.textContent || "", ok: "Remove", danger: true }))) return;
       await post(`/api/videos/${id}/delete`);
       row.remove();
       toast("Removed from the queue");
     } else if (action === "delete-audio") {
-      if (!confirm("Delete this track? Videos already rendered keep their audio.")) return;
+      if (!(await confirmDialog({ title: "Delete this track?", text: "Videos already rendered keep their audio.", ok: "Delete", danger: true }))) return;
       await post(`/api/audio/${btn.dataset.id}/delete`);
       btn.closest("tr").remove();
       toast("Track deleted");

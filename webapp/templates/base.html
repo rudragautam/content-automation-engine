@@ -1,36 +1,121 @@
-<!doctype html>
-<html lang="en">
+{% from "_ui.html" import icon %}<!doctype html>
+<html lang="en" data-palette="{{ palette }}">
 <head>
 <meta charset="utf-8">
-<meta name="viewport" content="width=device-width, initial-scale=1">
-<title>{% block title %}Content Hub{% endblock %} · Content Hub</title>
-<link rel="stylesheet" href="/static/app.css">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>{% block title %}Creator Hub{% endblock %} · Creator Hub</title>
+<script>/* light or dark from the toggle, before the first paint */try{var t=localStorage.getItem("hub-theme");if(t==="light"||t==="dark")document.documentElement.dataset.theme=t}catch(e){}</script>
+<link rel="preload" href="/static/fonts/plus-jakarta-sans-latin.woff2" as="font" type="font/woff2" crossorigin>
+<link rel="stylesheet" href="/static/css/tokens.css">
+<link rel="stylesheet" href="/static/css/base.css">
+<link rel="stylesheet" href="/static/css/layout.css">
+<link rel="stylesheet" href="/static/css/components.css">
+<link rel="stylesheet" href="/static/css/pages.css">
 </head>
 <body>
-<div class="shell{{ ' bare' if bare }}">
-  {% if not bare %}
-  <aside class="sidebar">
-    <div class="brand"><span class="brand-mark">▶</span>Content Hub</div>
-    <nav class="nav">
-      <a href="/" class="{{ 'active' if active == 'dashboard' }}">Dashboard {% if alert_count %}<span class="badge" title="{{ alert_count }} alerts">{{ alert_count }}</span>{% endif %}</a>
-      <a href="/schedule" class="{{ 'active' if active == 'schedule' }}">Schedule</a>
-      <a href="/content" class="{{ 'active' if active == 'content' }}">Content</a>
-      <a href="/media" class="{{ 'active' if active == 'media' }}">Media library</a>
-      <a href="/audio" class="{{ 'active' if active == 'audio' }}">Audio library</a>
-      <a href="/analytics" class="{{ 'active' if active == 'analytics' }}">Analytics</a>
-      <a href="/settings" class="{{ 'active' if active == 'settings' }}">Settings</a>
-    </nav>
-    <div class="sidebar-foot">
-      <button class="btn small" id="theme-toggle" type="button">Light / dark</button>
-      <span class="muted" style="font-size:12px">Times in Asia/Kolkata</span>
+<a class="skip-link btn primary" href="#main">Skip to content</a>
+<div class="blob b1" aria-hidden="true"></div><div class="blob b2" aria-hidden="true"></div><div class="blob b3" aria-hidden="true"></div>
+{% set ch = active_channel %}
+{% if bare %}
+<div class="app bare">
+  <main id="main">{% block bare_content %}{{ self.content() }}{% endblock %}</main>
+</div>
+{% else %}
+{% set nav = [
+  ('dashboard', '/', 'Dashboard', 'dashboard'),
+  ('analytics', '/analytics', 'Analytics', 'analytics'),
+  ('optimizer', optimizer_href, 'AI Optimizer', 'optimizer'),
+  ('drafts', '/content', 'Drafts', 'drafts'),
+  ('schedule', '/schedule', 'Schedule', 'schedule'),
+  ('media', '/media', 'Media', 'media'),
+  ('audio', '/audio', 'Audio', 'audio'),
+  ('settings', '/settings', 'Settings', 'settings'),
+] %}
+<div class="app">
+  <nav class="side glass" aria-label="Main">
+    <a class="brand" href="/"><span class="logo">{{ icon('play') }}</span>Creator Hub</a>
+    <div class="nav">
+      {% for key, href, label, ic in nav %}
+      <a href="{{ href }}" class="{{ 'on' if section == key }}" {% if section == key %}aria-current="page"{% endif %}>{{ icon(ic) }}<span>{{ label }}</span>{% if key == 'dashboard' and alert_count %}<span class="badge count" title="{{ alert_count }} things need attention">{{ alert_count }}</span>{% endif %}</a>
+      {% endfor %}
     </div>
-  </aside>
-  {% endif %}
-  <main>
+    <div class="nav-foot">Times in Asia/Kolkata</div>
+  </nav>
+
+  <main id="main">
+    <header class="top">
+      <div class="top-title">
+        {% block crumbs %}{% endblock %}
+        {% set page_title = self.page_title() | trim %}
+        {% if page_title %}<h1>{% block page_title %}{% endblock %}</h1>{% endif %}
+        {% set page_desc = self.page_desc() | trim %}
+        {% if page_desc %}<p>{% block page_desc %}{% endblock %}</p>{% endif %}
+      </div>
+      <div class="top-tools">
+        <button class="chip-channel" type="button" id="open-channels" aria-controls="channels" aria-expanded="false" aria-label="Switch channel. Now: {{ ch.name if ch else 'All channels' }}">
+          <span class="av sm" style="background:{{ ch.colour if ch else 'var(--primary-1)' }}" aria-hidden="true">{{ ch.name[:1] if ch else '∗' }}</span><b>{{ ch.name if ch else 'All channels' }}</b>
+        </button>
+        <div class="pal" role="group" aria-label="{{ 'Theme for ' ~ ch.name if ch else 'Pick a channel to give it a theme' }}" data-palette-picker {% if ch %}data-channel="{{ ch.id }}"{% else %}data-disabled{% endif %}>
+          {% for key, (label, c1, c2) in palettes.items() %}
+          <button type="button" data-p="{{ key }}" aria-pressed="{{ 'true' if key == palette else 'false' }}" aria-label="{{ label }} palette" title="{{ label }}" {% if not ch %}disabled{% endif %}><i style="background:linear-gradient(135deg,{{ c1 }},{{ c2 }})"></i><span>{{ label }}</span></button>
+          {% endfor %}
+        </div>
+        <button class="icon-btn" type="button" id="theme-toggle" aria-label="Switch between light and dark">{{ icon('moon', cls='theme-dark') }}{{ icon('sun', cls='theme-light') }}</button>
+        {% block page_actions %}{% endblock %}
+      </div>
+    </header>
     {% if mock_count_global %}<div class="mock-banner"><strong>Mock data.</strong> {{ mock_count_global }} simulated channels are loaded alongside your real ones. Remove them in <a href="/settings">Settings</a> once your channels are connected.</div>{% endif %}
     {% block content %}{% endblock %}
   </main>
+
+  <aside class="channels glass" id="channels" aria-label="Channels">
+    <div class="channels-head"><h2>Channels</h2><span class="sp"></span>
+      <button class="icon-btn" type="button" id="close-channels" aria-label="Close channel menu">{{ icon('close') }}</button></div>
+    <a class="ch {{ 'on' if not ch }}" href="{{ all_channels_url }}" data-switch data-palette="ember" {% if not ch %}aria-current="true"{% endif %}>
+      <span class="av" style="background:var(--primary)" aria-hidden="true">{{ icon('channels') }}</span>
+      <span class="n"><b>All channels</b><span>Every channel together</span></span>
+    </a>
+    {% for c in shell_channels %}
+    <a class="ch {{ 'on' if ch and ch.id == c.id }}" href="{{ c.switch_url }}" data-switch data-palette="{{ c.palette }}" {% if ch and ch.id == c.id %}aria-current="true"{% endif %}>
+      <span class="av" style="background:{{ c.colour }}" aria-hidden="true">{{ c.name[:1] }}</span>
+      <span class="n"><b>{{ c.name }}</b><span>{% if c.connection == 'expired' %}Sign in again{% elif c.last_upload %}Last upload {{ c.last_upload | when }}{% else %}{{ c.subscribers | compact }} subscribers{% endif %}</span></span>
+      <span class="st {{ c.status }}" title="{{ {'ok': 'Connected', 'warn': 'Needs attention', 'off': 'Not connected'}[c.status] }}"><span class="sr-only">{{ {'ok': 'Connected', 'warn': 'Needs attention', 'off': 'Not connected'}[c.status] }}</span></span>
+    </a>
+    {% endfor %}
+    {% if shell_planned %}
+    <details class="channels-more" {{ 'open' if ch and not ch.youtube_channel_id }}>
+      <summary class="channels-group">Not on YouTube yet · {{ shell_planned | length }}</summary>
+      {% for c in shell_planned %}
+      <a class="ch {{ 'on' if ch and ch.id == c.id }}" href="{{ c.switch_url }}" data-switch data-palette="{{ c.palette }}" {% if ch and ch.id == c.id %}aria-current="true"{% endif %}>
+        <span class="av" style="background:{{ c.colour }}" aria-hidden="true">{{ c.name[:1] }}</span>
+        <span class="n"><b>{{ c.name }}</b><span>Planned</span></span>
+        <span class="st off" title="Not created on YouTube yet"><span class="sr-only">Not created on YouTube yet</span></span>
+      </a>
+      {% endfor %}
+    </details>
+    {% endif %}
+    <p class="note">Each channel keeps its own theme; change it with the swatches at the top.</p>
+  </aside>
 </div>
+<div class="scrim" id="scrim"></div>
+
+<nav class="tabs glass" aria-label="Main (mobile)">
+  {% for key, href, label, ic in [('dashboard', '/', 'Home', 'dashboard'), ('analytics', '/analytics', 'Stats', 'analytics'), ('optimizer', optimizer_href, 'AI', 'optimizer'), ('drafts', '/content', 'Drafts', 'drafts'), ('schedule', '/schedule', 'Schedule', 'schedule')] %}
+  <a href="{{ href }}" class="{{ 'on' if section == key }}" {% if section == key %}aria-current="page"{% endif %}>{{ icon(ic) }}{{ label }}</a>
+  {% endfor %}
+</nav>
+{% endif %}
+
+<dialog class="modal" id="confirm-dialog" aria-labelledby="confirm-title">
+  <form method="dialog" class="modal-body">
+    <h2 id="confirm-title">Are you sure?</h2>
+    <div id="confirm-text"></div>
+  </form>
+  <div class="modal-actions">
+    <button class="btn" type="button" value="cancel" data-confirm-cancel>Cancel</button>
+    <button class="btn primary" type="button" value="ok" data-confirm-ok>Continue</button>
+  </div>
+</dialog>
 <script type="module" src="/static/app.js"></script>
 </body>
 </html>
