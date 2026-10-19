@@ -1,0 +1,22 @@
+{% extends "base.html" %}
+{% from "_macros.html" import status %}
+{% from "_suggest.html" import panel %}
+{% from "_ui.html" import icon %}
+{% block title %}Suggestions · {{ video.title }}{% endblock %}
+{% block crumbs %}<div class="crumbs"><a href="/channels/{{ video.channel_id }}#queue">{{ video.channel_name }} · Queue</a> /</div>{% endblock %}
+{% block page_title %}{{ video.title }}{% endblock %}
+{% block page_desc %}{{ status(video.status) }} · publishes {{ video.publish_at | when }}{% if video.duration_s %} · {{ '%.0f' % video.duration_s }} s{% endif %}{% endblock %}
+{% block page_actions %}{% if video.status == 'rendered' %}<a class="btn" href="/media/video/{{ video.id }}" target="_blank" rel="noopener">{{ icon('play', cls='sm') }}Preview video</a>{% endif %}{% endblock %}
+{% block content %}
+{% if notice %}<div class="notice ok">{{ notice }}</div>{% endif %}
+{% if problem %}<div class="notice bad">{{ problem }}</div>{% endif %}
+
+<section class="card">
+  {% if local or suggestion %}
+    {{ panel(suggestion, '/videos/' ~ video.id ~ '/suggest') }}
+  {% else %}
+    <p class="muted">This video is already on YouTube. Suggestions for uploaded videos come from the channel analysis.</p>
+  {% endif %}
+</section>
+<p class="note">Gemini can only improve the title, description and tags. It can't change what's inside the video (hook, visuals, audio); the hook advice is for the next edit. Better metadata can improve reach but doesn't guarantee views.</p>
+{% endblock %}

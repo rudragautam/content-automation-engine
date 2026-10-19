@@ -1,0 +1,51 @@
+{% extends "base.html" %}
+{% from "_ui.html" import icon, empty_state %}
+{% from "_macros.html" import pager %}
+{% block title %}Audio library{% endblock %}
+{% block page_title %}Audio library{% endblock %}
+{% block page_desc %}Background music for each niche. Each render picks a random track, never the same one twice in a row.{% endblock %}
+{% block content %}
+
+<nav class="pill-list" aria-label="Niches" style="margin-bottom:var(--s5)">
+  {% for n in niches %}<a class="pill {{ 'on' if n.id == niche }}" href="/audio?niche={{ n.id }}">{{ n.name }}<span class="count">{{ n.tracks }}</span></a>{% endfor %}
+</nav>
+
+<section class="card">
+  <h2>Add tracks to {{ niche_label }}</h2>
+  <form method="post" action="/audio/{{ niche }}" enctype="multipart/form-data" class="form-row">
+    <label class="field">Audio files (mp3, wav, m4a, aac, ogg, flac)
+      <input type="file" name="files" accept=".mp3,.wav,.m4a,.aac,.ogg,.flac" multiple required>
+    </label>
+    <label class="field" style="flex:1;min-width:220px">Licence or source
+      <input type="text" name="licence" placeholder="e.g. YouTube Audio Library, Pixabay, bought from …" maxlength="200">
+    </label>
+    <button class="btn primary" type="submit">{{ icon('upload') }}Upload</button>
+  </form>
+  <p class="muted small" style="margin-top:var(--s3)">Only use music you have the rights to. Unlicensed tracks trigger Content ID claims, which can block or demonetise a video.</p>
+  {% if notice %}
+    {% if notice.added %}<div class="notice ok" style="margin-top:var(--s3)">{{ notice.added }} track{{ '' if notice.added == 1 else 's' }} added.</div>{% endif %}
+    {% for p in notice.problems %}<div class="notice bad" style="margin-top:var(--s2)">{{ p }}</div>{% endfor %}
+  {% endif %}
+</section>
+
+<section class="card section">
+  <div class="card-head"><h2>{{ niche_label }} tracks</h2><span class="muted">{{ tracks.total }}</span></div>
+  {% if tracks %}
+  <div class="table-wrap"><table>
+    <thead><tr><th>Track</th><th>Listen</th><th class="r">Length</th><th>Licence</th><th class="r">Used</th><th>Last used</th><th></th></tr></thead>
+    <tbody>{% for t in tracks %}
+      <tr>
+        <td class="cell-title clip" title="{{ t.title }}">{{ t.title }}</td>
+        <td><audio controls preload="none" src="/media/audio/{{ t.id }}"></audio></td>
+        <td class="r num">{{ '%d:%02d' % ((t.duration_s // 60) | int, (t.duration_s % 60) | int) }}</td>
+        <td class="secondary">{{ t.licence or '—' }}</td>
+        <td class="r num">{{ t.times_used }}</td>
+        <td class="num">{{ t.last_used_at | when }}</td>
+        <td class="r"><button class="btn small danger" data-action="delete-audio" data-id="{{ t.id }}" type="button">Delete</button></td>
+      </tr>
+    {% endfor %}</tbody>
+  </table></div>
+  {{ pager(tracks, "tracks") }}
+  {% else %}{{ empty_state("No tracks yet", "Videos for this niche render without music until you add some above.", none, none, "audio") }}{% endif %}
+</section>
+{% endblock %}

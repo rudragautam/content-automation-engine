@@ -1,0 +1,63 @@
+{# AI Optimizer reports: history, month-to-month comparison and the results of changes made on YouTube. #}
+{% macro history_table(history, channel_id, current=none) -%}
+{% if history %}
+<div class="table-wrap"><table>
+  <thead><tr><th>Analysis</th><th class="r">Score</th><th class="r">Views (28 d)</th><th class="r">% viewed</th><th class="r">From recommendations</th><th class="r">Problems</th><th></th></tr></thead>
+  <tbody>{% for h in history %}
+    <tr{% if current and h.id == current.id %} class="current-row"{% endif %}>
+      <td><a href="/channels/{{ channel_id }}/analysis/{{ h.id }}">{{ h.started_at | when }}</a>{% if h.status != 'ready' %} <span class="muted small">{{ h.status }}</span>{% endif %}</td>
+      <td class="r num">{{ h.score if h.score is not none else '—' }}</td>
+      <td class="r num">{{ h.numbers.views | compact if h.numbers.views is defined else '—' }}</td>
+      <td class="r num">{{ ('%.0f%%' % h.numbers.avg_view_pct) if h.numbers.avg_view_pct is defined and h.numbers.avg_view_pct is not none else '—' }}</td>
+      <td class="r num">{{ ('%.0f%%' % h.numbers.recommended_pct) if h.numbers.recommended_pct is defined else '—' }}</td>
+      <td class="r num">{{ h.problems if h.status == 'ready' else '—' }}</td>
+      <td class="r">{% if current and h.id != current.id and h.status == 'ready' and current.status == 'ready' %}<a class="btn small" href="/channels/{{ channel_id }}/analysis/{{ current.id }}/compare/{{ h.id }}">Compare</a>{% endif %}</td>
+    </tr>
+  {% endfor %}</tbody>
+</table></div>
+{% else %}<div class="empty">No analyses yet.</div>{% endif %}
+{%- endmacro %}
+
+{% macro diff_metrics(diff) -%}
+<div class="table-wrap"><table>
+  <thead><tr><th>Metric</th><th class="r">Before</th><th class="r">Now</th><th class="r">Change</th></tr></thead>
+  <tbody>{% for m in diff.metrics %}
+    <tr><td>{{ m.label }}</td><td class="r num">{{ m.old if m.old is not none else '—' }}</td><td class="r num">{{ m.new if m.new is not none else '—' }}</td>
+      <td class="r num"><span class="delta {{ 'up' if m.good == true else 'down' if m.good == false }}">{{ ('%+g' % m.diff) if m.diff is not none else '—' }}</span></td></tr>
+  {% endfor %}</tbody>
+</table></div>
+{%- endmacro %}
+
+{% macro diff_findings(diff) -%}
+<div class="grid cols-3 diff-findings">
+  <div><h3>Fixed <span class="muted">{{ diff.fixed | length }}</span></h3>
+    <ul>{% for f in diff.fixed %}<li>{{ f.title }}</li>{% else %}<li class="muted">None</li>{% endfor %}</ul></div>
+  <div><h3>New <span class="muted">{{ diff.new | length }}</span></h3>
+    <ul>{% for f in diff.new %}<li>{{ f.title }}</li>{% else %}<li class="muted">None</li>{% endfor %}</ul></div>
+  <div><h3>Still open <span class="muted">{{ diff.open | length }}</span></h3>
+    <ul>{% for f in diff.open %}<li>{{ f.title }}</li>{% else %}<li class="muted">None</li>{% endfor %}</ul></div>
+</div>
+{%- endmacro %}
+
+{% macro change_results(results) -%}
+{% if results %}
+<div class="table-wrap"><table>
+  <thead><tr><th>Video</th><th>Changed</th><th class="r">7 days before</th><th class="r">7 days after</th><th class="r">Change</th></tr></thead>
+  <tbody>{% for c in results %}
+    <tr>
+      <td><div class="cell-title clip" title="{{ c.video_title }}">{{ c.video_title }}</div><div class="cell-sub">{{ c.fields }}{{ ' · rolled back' if c.rolled_back }}</div></td>
+      <td>{{ c.changed_at | when }}</td>
+      {% if c.state == 'measured' %}
+        <td class="r num">{{ c.before }}</td><td class="r num">{{ c.after }}</td>
+        <td class="r num">{% if c.change_pct is not none %}<span class="delta {{ 'up' if c.change_pct > 0 else 'down' if c.change_pct < 0 }}">{{ '%+.0f%%' % c.change_pct }}</span>{% else %}<span class="muted">no views before</span>{% endif %}</td>
+      {% elif c.state == 'waiting' %}
+        <td colspan="3" class="r muted">Not enough days yet; measured from {{ c.ready_on }}</td>
+      {% else %}
+        <td colspan="3" class="r muted">Couldn't read: {{ c.error }}</td>
+      {% endif %}
+    </tr>
+  {% endfor %}</tbody>
+</table></div>
+<p class="muted small">Views change for many reasons (season, other uploads, a share); a single change's before and after is a hint, not proof.</p>
+{% else %}<div class="empty">No changes on YouTube to measure yet.</div>{% endif %}
+{%- endmacro %}

@@ -14,9 +14,17 @@
 .progress{position:absolute;top:0;left:0;width:100%;height:4px;background:rgba(255,255,255,.08);z-index:5}.progress-fill{height:100%;width:0;background:linear-gradient(90deg,var(--accent),var(--accent-2));transform-origin:left}
 h1,h2{margin:0;line-height:1.05}h1{font-size:clamp(34px,8vw,64px);text-transform:uppercase}h2{font-size:clamp(27px,6vw,50px)}p{font-size:clamp(16px,3.6vw,23px);line-height:1.65;color:var(--muted)}
 .kicker{font-size:11px;letter-spacing:4px;color:var(--accent-2);margin-bottom:16px}.micro{margin-top:24px;font-size:10px;letter-spacing:3px;color:rgba(255,255,255,.45);text-transform:uppercase}.cursor{display:inline-block;width:2px;height:1em;background:var(--accent-2);vertical-align:-.12em;animation:blink .7s infinite}@keyframes blink{50%{opacity:0}}
+</style><style id="responsive">
+/* Preview-only. The 9:16 column is limited by viewport height on wide screens, so type follows the column width (cqi) instead of the viewport width (vw). When the column is the full viewport width, which is true at every video render size, cqi equals vw and the layout is unchanged. */
+.shorts-container{container-type:inline-size}
+.watermark{font-size:clamp(100px,24cqi,220px)}
+h1{font-size:clamp(34px,8cqi,64px)}h2{font-size:clamp(27px,6cqi,50px)}p{font-size:clamp(16px,3.6cqi,23px)}
+/* Phone held sideways: a 9:16 column would be too narrow to read, so widen it and tighten spacing. */
+@media (orientation:landscape) and (max-height:500px){.shorts-container{width:min(100vw,560px)}.slide{padding:3% 4%}.card{padding:5% 7%;border-radius:20px}.kicker{margin-bottom:8px}h1{font-size:26px}h2{font-size:22px}p{font-size:14px;line-height:1.5;margin:10px 0 0}.micro{margin-top:12px}.watermark{font-size:90px}}
 </style></head>
 <body><main class="shorts-container" id="app"></main>
 <script>
+const introData={kicker:"DAILY MINDSET",title:"5 Daily Habits That Ruin Your Focus",text:"Some habits quietly destroy your concentration without you noticing.",micro:"↑ SWIPE UP TO START",duration:4};
 const slidesData=[
 {title:"📱 PHONE CHECKING",text:"Checking your phone every few minutes destroys deep focus before it even begins."},
 {title:"🔔 CONSTANT NOTIFICATIONS",text:"Every ping forces your brain to switch context, making simple work take much longer."},
@@ -24,11 +32,15 @@ const slidesData=[
 {title:"🧠 MULTITASKING",text:"Doing several things at once feels productive, but your brain is repeatedly paying a switching cost."}
 ];
 const app=document.getElementById("app");
-function intro(){return `<section class="slide intro"><div class="progress"><div class="progress-fill"></div></div><div class="watermark">01</div><div class="card"><div class="kicker">DAILY MINDSET</div><h1>5 Daily Habits That Ruin Your Focus</h1><p>Some habits quietly destroy your concentration without you noticing.</p><div class="micro">↑ SWIPE UP TO START</div></div></section>`}
-function fact(d,i){return `<section class="slide"><div class="progress"><div class="progress-fill"></div></div><div class="watermark">${String(i+1).padStart(2,"0")}</div><div class="card"><div class="kicker">HABIT ${i+1}</div><h2>${d.title}</h2><p class="type" data-text="${esc(d.text)}"></p></div></section>`}
+const DEFAULT_DURATION=5.5;
+function dur(d){return (Number(d&&d.duration)||DEFAULT_DURATION)*1000}
+function intro(){return `<section class="slide intro" data-dur="${dur(introData)}"><div class="progress"><div class="progress-fill"></div></div><div class="watermark">01</div><div class="card"><div class="kicker">${esc(introData.kicker)}</div><h1>${esc(introData.title)}</h1><p>${esc(introData.text)}</p><div class="micro">${esc(introData.micro)}</div></div></section>`}
+function fact(d,i){return `<section class="slide" data-dur="${dur(d)}"><div class="progress"><div class="progress-fill"></div></div><div class="watermark">${String(i+1).padStart(2,"0")}</div><div class="card"><div class="kicker">HABIT ${i+1}</div><h2>${d.title}</h2><p class="type" data-text="${esc(d.text)}"></p></div></section>`}
 function esc(s){return String(s).replace(/&/g,"&amp;").replace(/"/g,"&quot;").replace(/</g,"&lt;").replace(/>/g,"&gt;")}
-function build(){app.innerHTML=intro()+slidesData.map(fact).join("")}
+function build(){document.title=introData.title;app.innerHTML=intro()+slidesData.map(fact).join("")}
 function reset(s){clearInterval(s._tw);const f=s.querySelector(".progress-fill");if(f){f.style.transition="none";f.style.width="0"}const t=s.querySelector(".type");if(t)t.innerHTML=""}
-function activate(s){document.querySelectorAll(".slide").forEach(reset);s.classList.add("active");const f=s.querySelector(".progress-fill");if(f)requestAnimationFrame(()=>{f.style.transition=`width ${5500}ms linear`;f.style.width="100%"});const t=s.querySelector(".type");if(t){let i=0;const text=t.dataset.text;t.innerHTML="";const c=document.createElement("span");c.className="cursor";t.append(c);s._tw=setInterval(()=>{if(i>=text.length)return clearInterval(s._tw);c.before(document.createTextNode(text[i++]));},28)}}
-build();const io=new IntersectionObserver(es=>es.forEach(e=>{if(e.isIntersecting&&e.intersectionRatio>.65)activate(e.target)}),{root:app,threshold:.65});document.querySelectorAll(".slide").forEach(s=>io.observe(s));activate(document.querySelector(".slide"));
+function activate(s){document.querySelectorAll(".slide").forEach(reset);s.classList.add("active");const f=s.querySelector(".progress-fill");if(f)requestAnimationFrame(()=>{f.style.transition=`width ${s.dataset.dur}ms linear`;f.style.width="100%"});const t=s.querySelector(".type");if(t){let i=0;const text=t.dataset.text;t.innerHTML="";const c=document.createElement("span");c.className="cursor";t.append(c);s._tw=setInterval(()=>{if(i>=text.length)return clearInterval(s._tw);c.before(document.createTextNode(text[i++]));},28)}}
+build();const io=new IntersectionObserver(es=>es.forEach(e=>{if(window.__engine.driven)return;if(e.isIntersecting&&e.intersectionRatio>.65)activate(e.target)}),{root:app,threshold:.65});document.querySelectorAll(".slide").forEach(s=>io.observe(s));
+window.__engine={driven:false,count:document.querySelectorAll(".slide").length,goTo(i){this.driven=true;const s=document.querySelectorAll(".slide")[i];app.scrollTo({top:s.offsetTop,behavior:"instant"});activate(s)}};
+activate(document.querySelector(".slide"));
 </script></body></html>

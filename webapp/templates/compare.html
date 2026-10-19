@@ -1,0 +1,21 @@
+{% extends "base.html" %}
+{% from "_reports.html" import history_table, diff_metrics, diff_findings %}
+{% from "_ui.html" import icon %}
+{% block title %}Compare analyses · {{ channel.name }}{% endblock %}
+{% block crumbs %}<div class="crumbs"><a href="/channels/{{ channel.id }}#analysis">{{ channel.name }}</a> / <a href="/channels/{{ channel.id }}/analysis/{{ new.id }}">AI Optimizer</a> /</div>{% endblock %}
+{% block page_title %}Progress{% endblock %}
+{% block page_desc %}{{ old.started_at | when }} → {{ new.started_at | when }}, {{ diff.days_apart }} days apart.{% endblock %}
+{% block content %}
+<section class="card">
+  <div class="card-head"><h2>Numbers</h2><span class="muted">each analysis covers its own last 28 days</span></div>
+  {{ diff_metrics(diff) }}
+</section>
+<section class="card section">
+  <div class="card-head"><h2>Findings</h2><span class="muted">problems from the rule-based checks</span></div>
+  {{ diff_findings(diff) }}
+</section>
+<section class="card section">
+  <div class="card-head"><h2>All analyses</h2></div>
+  {{ history_table(history, channel.id, new) }}
+</section>
+{% endblock %}

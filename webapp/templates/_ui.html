@@ -1,0 +1,76 @@
+{# Shared UI components. Import what a page needs:
+   {% from "_ui.html" import icon, stat, ring, empty_state %} #}
+
+{# Line icons (24px grid, stroke = currentColor). Decorative unless a label is given. #}
+{% macro icon(name, label=none, cls="") -%}
+{%- set paths = {
+  'dashboard': '<rect x="3" y="3" width="7" height="9" rx="2"/><rect x="14" y="3" width="7" height="5" rx="2"/><rect x="14" y="12" width="7" height="9" rx="2"/><rect x="3" y="16" width="7" height="5" rx="2"/>',
+  'analytics': '<path d="M4 20V10M10 20V4M16 20v-7M22 20H2"/>',
+  'optimizer': '<path d="M12 3l2.4 5.6L20 11l-5.6 2.4L12 19l-2.4-5.6L4 11l5.6-2.4z"/>',
+  'drafts': '<path d="M5 4h14v16H5zM9 9h6M9 13h6"/>',
+  'schedule': '<rect x="3" y="5" width="18" height="16" rx="3"/><path d="M8 3v4M16 3v4M3 11h18"/>',
+  'settings': '<circle cx="12" cy="12" r="3"/><path d="M19 12a7 7 0 00-.1-1.2l2-1.5-2-3.4-2.3 1a7 7 0 00-2-1.2L14 3h-4l-.6 2.7a7 7 0 00-2 1.2l-2.3-1-2 3.4 2 1.5A7 7 0 005 12c0 .4 0 .8.1 1.2l-2 1.5 2 3.4 2.3-1a7 7 0 002 1.2L10 21h4l.6-2.7a7 7 0 002-1.2l2.3 1 2-3.4-2-1.5c.1-.4.1-.8.1-1.2z"/>',
+  'media': '<rect x="3" y="5" width="18" height="14" rx="3"/><path d="M10 9.5v5l4-2.5z"/>',
+  'audio': '<path d="M9 18V6l11-2v12"/><circle cx="6" cy="18" r="3"/><circle cx="17" cy="16" r="3"/>',
+  'play': '<path d="M8 5l11 7-11 7z" fill="currentColor"/>',
+  'moon': '<path d="M20 14.5A8 8 0 019.5 4a8.5 8.5 0 1010.5 10.5z"/>',
+  'sun': '<circle cx="12" cy="12" r="4"/><path d="M12 2v2M12 20v2M4.9 4.9l1.4 1.4M17.7 17.7l1.4 1.4M2 12h2M20 12h2M4.9 19.1l1.4-1.4M17.7 6.3l1.4-1.4"/>',
+  'channels': '<circle cx="9" cy="8" r="3.5"/><path d="M2.5 20c.8-3.5 3.4-5.5 6.5-5.5s5.7 2 6.5 5.5"/><path d="M16 4.6a3.5 3.5 0 010 6.8M18 14.8c2 .7 3.2 2.5 3.6 5.2"/>',
+  'close': '<path d="M6 6l12 12M18 6L6 18"/>',
+  'views': '<path d="M2 12s3.6-7 10-7 10 7 10 7-3.6 7-10 7S2 12 2 12z"/><circle cx="12" cy="12" r="3"/>',
+  'clock': '<circle cx="12" cy="12" r="9"/><path d="M12 7v5l3 2"/>',
+  'search': '<circle cx="11" cy="11" r="7"/><path d="M20 20l-3.5-3.5"/>',
+  'users': '<circle cx="12" cy="8" r="4"/><path d="M4 21c1-4 4.2-6 8-6s7 2 8 6"/>',
+  'upload': '<path d="M12 16V4M7 9l5-5 5 5M4 20h16"/>',
+  'check': '<path d="M5 12.5l4.5 4.5L19 7.5"/>',
+  'alert': '<path d="M12 3l10 18H2z"/><path d="M12 10v4M12 17.5v.5"/>',
+  'heart': '<path d="M12 20s-7-4.4-7-10a4 4 0 017-2.6A4 4 0 0119 10c0 5.6-7 10-7 10z"/>',
+  'gauge': '<path d="M4 18a8 8 0 1116 0"/><path d="M12 18l4-6"/>',
+  'sparkle': '<path d="M12 3l2.4 5.6L20 11l-5.6 2.4L12 19l-2.4-5.6L4 11l5.6-2.4z"/>',
+  'plus': '<path d="M12 5v14M5 12h14"/>',
+  'undo': '<path d="M9 14L4 9l5-5"/><path d="M4 9h11a5 5 0 010 10h-3"/>',
+  'external': '<path d="M14 4h6v6M20 4l-9 9M18 14v5a1 1 0 01-1 1H5a1 1 0 01-1-1V7a1 1 0 011-1h5"/>',
+  'link': '<path d="M10 14a4 4 0 005.7 0l3-3a4 4 0 00-5.7-5.7l-1 1"/><path d="M14 10a4 4 0 00-5.7 0l-3 3a4 4 0 005.7 5.7l1-1"/>',
+  'empty': '<rect x="3" y="4" width="18" height="16" rx="3"/><path d="M3 13h5l2 3h4l2-3h5"/>',
+  'menu': '<path d="M4 7h16M4 12h16M4 17h16"/>',
+} -%}
+<svg class="i {{ cls }}" viewBox="0 0 24 24" {% if label %}role="img" aria-label="{{ label }}"{% else %}aria-hidden="true" focusable="false"{% endif %}>{{ paths.get(name, paths['sparkle']) | safe }}</svg>
+{%- endmacro %}
+
+{# A stat card: label with icon, big number, and a badge or line under it. #}
+{% macro stat(label, value, icon_name="analytics", tip=none) -%}
+<div class="tile">
+  <div class="label">{{ icon(icon_name) }}<span>{{ label }}</span>{% if tip %}<button type="button" class="tip-i" data-tooltip="{{ tip }}" aria-label="{{ label }}: {{ tip }}">?</button>{% endif %}</div>
+  <div class="value">{{ value }}</div>
+  {{ caller() if caller is defined else '' }}
+</div>
+{%- endmacro %}
+
+{# A score ring: 0-100, coloured by how good it is. #}
+{% macro ring(score, label="Score", size="") -%}
+{%- set s = score if score is not none else 0 -%}
+{%- set colour = 'var(--teal)' if s >= 60 else 'var(--amber)' if s >= 40 else 'var(--red)' -%}
+<div class="ring-wrap">
+  <div class="ring {{ size }}" role="img" aria-label="{{ label }}: {{ score if score is not none else 'not enough data yet' }}">
+    <svg viewBox="0 0 120 120" aria-hidden="true"><circle cx="60" cy="60" r="50" fill="none" stroke="var(--line)" stroke-width="12"/>
+      {% if score is not none %}<circle cx="60" cy="60" r="50" fill="none" stroke="{{ colour }}" stroke-width="12" stroke-linecap="round" stroke-dasharray="314" stroke-dashoffset="{{ (314 - 314 * s / 100) | round(1) }}"/>{% endif %}</svg>
+    <div class="v">{{ score if score is not none else '—' }}</div>
+  </div>
+  {% if label %}<span class="ring-label">{{ label }}</span>{% endif %}
+</div>
+{%- endmacro %}
+
+{# A friendly empty state with an optional call to action. #}
+{% macro empty_state(title, text="", href=none, action=none, icon_name="empty") -%}
+<div class="empty">
+  <span class="empty-icon">{{ icon(icon_name) }}</span>
+  <strong>{{ title }}</strong>
+  {% if text %}<span>{{ text }}</span>{% endif %}
+  {% if href and action %}<a class="btn primary small" href="{{ href }}">{{ action }}</a>{% endif %}
+</div>
+{%- endmacro %}
+
+{# Severity dot for problem cards. #}
+{% macro issue(severity, title, text) -%}
+<div class="issue"><span class="dot {{ severity }}" aria-hidden="true"></span><div><b>{{ title }}</b>{% if text %}<span>{{ text }}</span>{% endif %}</div></div>
+{%- endmacro %}

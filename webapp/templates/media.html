@@ -1,0 +1,77 @@
+{% extends "base.html" %}
+{% from "_ui.html" import icon, empty_state %}
+{% from "_macros.html" import status as status_chip, pager, scope_filter %}
+{% block title %}Media library{% endblock %}
+{% macro mmss(s) -%}{{ '%d:%02d' % (((s or 0) // 60) | int, ((s or 0) % 60) | int) }}{%- endmacro %}
+{% block page_title %}Media library{% endblock %}
+{% block page_desc %}Every rendered video on this PC{% if scope.active %}, for {{ scope.label }}{% endif %}. Tap a video to play it.{% endblock %}
+{% block content %}
+<div class="filters" style="margin-bottom:var(--s5)">{{ scope_filter(scope, {'niche': niche, 'status': status}) }}</div>
+
+<nav class="pill-list" aria-label="Niches" style="margin-bottom:var(--s3)">
+  <a class="pill {{ 'on' if not niche }}" href="/media?status={{ status }}">All niches<span class="count">{{ all_count }}</span></a>
+  {% for n in niches %}<a class="pill {{ 'on' if n.id == niche }}" href="/media?niche={{ n.id }}&status={{ status }}">{{ n.name }}<span class="count">{{ n.count }}</span></a>{% endfor %}
+</nav>
+<nav class="pill-list" aria-label="Status" style="margin-bottom:var(--s5)">
+  {% for key, label in [('', 'Any status'), ('rendered', 'Not on YouTube yet'), ('youtube', 'On YouTube')] %}
+  <a class="pill {{ 'on' if status == key }}" href="/media?niche={{ niche }}&status={{ key }}">{{ label }}</a>
+  {% endfor %}
+</nav>
+
+<section class="card">
+  {% if videos %}
+  <div class="card-head"><h2>Videos</h2><span class="muted">{{ videos.total }} · {{ mmss(shown_seconds) }} in total · {{ shown_bytes | filesizeformat }}</span></div>
+  <div class="table-wrap"><table class="media-list">
+    <thead><tr><th>Video</th><th>Format</th><th class="r">Length</th><th>Status</th><th>Publishes</th><th>Music</th><th class="r">Size</th><th class="r"></th></tr></thead>
+    <tbody>{% for v in videos %}
+      <tr class="media-row" tabindex="0" data-play="{{ v.id }}" data-title="{{ v.title }}" data-sub="{{ v.channel_name }} · {{ niche_name(v.niche) }}" data-aspect="{{ v.aspect }}">
+        <td><div class="cell-title clip" title="{{ v.title }}">{{ v.title }}</div>
+            <div class="cell-sub"><a href="/channels/{{ v.channel_id }}">{{ v.channel_name }}</a> · {{ niche_name(v.niche) }}</div></td>
+        <td class="secondary">{{ 'Short · 9:16' if v.aspect == '9:16' else '16:9' }}</td>
+        <td class="r num">{{ mmss(v.duration_s) }}</td>
+        <td>{{ status_chip(v.status) }}</td>
+        <td class="num">{{ v.publish_at | when }}</td>
+        <td class="secondary" title="{{ v.audio_title or '' }}">{{ v.audio_title or '—' }}</td>
+        <td class="r num">{{ v.size | filesizeformat }}</td>
+        <td class="r nowrap"><button class="btn small primary" type="button" data-play-button>{{ icon('play', cls='sm') }}Play</button>
+          <a class="btn small" href="/media/video/{{ v.id }}?download=1">Download</a></td>
+      </tr>
+    {% endfor %}</tbody>
+  </table></div>
+  {{ pager(videos, "videos") }}
+  {% else %}
+  {% if all_count %}{{ empty_state('No videos match these filters', 'Try another niche or status.', '/media', 'Show all', 'media') }}{% else %}{{ empty_state('No rendered videos yet', 'Queue content and press Render; finished videos appear here.', '/content', 'Add content', 'media') }}{% endif %}
+  {% endif %}
+</section>
+
+<dialog class="player" id="player" aria-labelledby="player-title">
+  <div class="player-head">
+    <div><div class="cell-title" id="player-title"></div><div class="cell-sub" id="player-sub"></div></div>
+    <div class="actions"><a class="btn small" id="player-download" href="#">Download</a><button class="icon-btn" type="button" id="player-close" aria-label="Close player">{{ icon('close') }}</button></div>
+  </div>
+  <div class="player-frame"><video id="player-video" controls playsinline></video></div>
+</dialog>
+
+<script>
+(() => {
+  const dialog = document.getElementById("player"), video = document.getElementById("player-video");
+  function open(row) {
+    const id = row.dataset.play;
+    document.getElementById("player-title").textContent = row.dataset.title;
+    document.getElementById("player-sub").textContent = row.dataset.sub;
+    document.getElementById("player-download").href = `/media/video/${id}?download=1`;
+    dialog.dataset.aspect = row.dataset.aspect;
+    video.src = `/media/video/${id}`;
+    dialog.showModal();
+    video.play().catch(() => {});
+  }
+  document.querySelectorAll(".media-row").forEach(row => {
+    row.addEventListener("click", e => { if (!e.target.closest("a")) open(row); });
+    row.addEventListener("keydown", e => { if (e.key === "Enter" || e.key === " ") { e.preventDefault(); open(row); } });
+  });
+  document.getElementById("player-close").addEventListener("click", () => dialog.close());
+  dialog.addEventListener("click", e => { if (e.target === dialog) dialog.close(); });  // click outside the player
+  dialog.addEventListener("close", () => { video.pause(); video.removeAttribute("src"); video.load(); });
+})();
+</script>
+{% endblock %}

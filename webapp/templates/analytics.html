@@ -1,0 +1,72 @@
+{% extends "base.html" %}
+{% from "_ui.html" import icon, stat, empty_state %}
+{% from "_macros.html" import delta_short, delta, range_filter, scope_filter %}
+{% block title %}Analytics{% endblock %}
+{% block page_title %}Analytics{% endblock %}
+{% block page_desc %}{% if scope.active %}{{ scope.label }} · {{ channels | length }} channel{{ '' if channels | length == 1 else 's' }}{% else %}Every channel together{% endif %} · last {{ days }} days{% endblock %}
+{% block content %}
+<div class="filters" style="margin-bottom:var(--s5)">{{ scope_filter(scope, {'days': days}) }}{{ range_filter(days, ranges, "/analytics?") }}</div>
+
+<section class="tiles" aria-label="Last {{ days }} days">
+  {% call stat('Views', kpis.views | compact, 'views') %}{{ delta(kpis.views_delta, days) }}{% endcall %}
+  {% call stat('Watch hours', kpis.watch_hours | compact, 'clock') %}{{ delta(kpis.watch_delta, days) }}{% endcall %}
+  {% call stat('Net subscribers', kpis.net_subs | signed, 'users') %}{{ delta(kpis.subs_delta, days) }}{% endcall %}
+  {% call stat('Videos published', kpis.published | compact, 'upload') %}<span class="delta">avg {{ ((kpis.views / kpis.published) if kpis.published else 0) | compact }} views each</span>{% endcall %}
+</section>
+</div>
+
+<div class="grid cols-3">
+  <section class="card"><div class="card-head"><h2>Daily views</h2></div>
+    <div class="chart" data-chart="line" data-src="v-data" data-height="180" data-label="Daily views"></div>
+    <script type="application/json" id="v-data">{{ views | tojson_safe }}</script></section>
+  <section class="card"><div class="card-head"><h2>Daily watch hours</h2></div>
+    <div class="chart" data-chart="line" data-src="w-data" data-height="180" data-label="Daily watch hours"></div>
+    <script type="application/json" id="w-data">{{ watch | tojson_safe }}</script></section>
+  <section class="card"><div class="card-head"><h2>Daily net subscribers</h2></div>
+    <div class="chart" data-chart="line" data-src="s-data" data-height="180" data-label="Daily net subscribers"></div>
+    <script type="application/json" id="s-data">{{ subs | tojson_safe }}</script></section>
+</div>
+
+<div class="grid cols-2 section">
+  <section class="card">
+    <div class="card-head"><h2>Views by niche</h2></div>
+    <div class="chart" data-chart="bars" data-src="niche-data"></div>
+    <script type="application/json" id="niche-data">{{ by_niche | tojson_safe }}</script>
+  </section>
+  <section class="card">
+    <div class="card-head"><h2>When videos do best</h2><span class="muted">avg views per video by publish slot</span></div>
+    <div class="chart" data-chart="heatmap" data-src="heat-data"></div>
+    <script type="application/json" id="heat-data">{{ heatmap | tojson_safe }}</script>
+  </section>
+</div>
+
+<section class="card section">
+  <div class="card-head"><h2>Channel comparison</h2></div>
+  <div class="table-wrap"><table>
+    <thead><tr><th>Channel</th><th>Niche</th><th class="r">Subscribers</th><th class="r">Views</th><th class="r">Change</th><th class="r">Watch hours</th><th class="r">Net subs</th><th>Views, 28 days</th></tr></thead>
+    <tbody>{% for c in channels | sort(attribute='views', reverse=true) %}
+      <tr>
+        <td><a class="cell-title" href="/channels/{{ c.id }}">{{ c.name }}</a></td>
+        <td class="secondary">{{ c.niche_name }}</td>
+        <td class="r num">{{ c.subscribers | compact }}</td>
+        <td class="r num">{{ c.views | compact }}</td>
+        <td class="r num">{{ delta_short(c.views_delta) }}</td>
+        <td class="r num">{{ c.watch_hours | compact }}</td>
+        <td class="r num">{{ c.net_subs | signed }}</td>
+        <td><span data-spark="{{ c.spark | tojson }}"></span></td>
+      </tr>
+    {% endfor %}</tbody>
+  </table></div>
+</section>
+
+<section class="card section">
+  <div class="card-head"><h2>Top videos across all channels</h2></div>
+  <div class="table-wrap"><table>
+    <thead><tr><th>Video</th><th>Channel</th><th>Published</th><th class="r">Views</th><th class="r">Avg viewed</th><th class="r">Likes</th></tr></thead>
+    <tbody>{% for v in top %}
+      <tr><td class="cell-title clip" title="{{ v.title }}">{{ v.title }}</td><td><a href="/channels/{{ v.channel_id }}">{{ v.channel_name }}</a></td>
+      <td class="num">{{ v.publish_at | when }}</td><td class="r num">{{ v.views | compact }}</td><td class="r num">{{ ('%.0f%%' % v.avg_view_pct) if v.avg_view_pct is not none else '—' }}</td><td class="r num">{{ v.likes | compact }}</td></tr>
+    {% endfor %}</tbody>
+  </table></div>
+</section>
+{% endblock %}

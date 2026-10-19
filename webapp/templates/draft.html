@@ -1,0 +1,64 @@
+{% extends "base.html" %}
+{% from "_suggest.html" import panel %}
+{% from "_ui.html" import icon, empty_state %}
+{% block title %}Gemini draft{% endblock %}
+{% block crumbs %}<div class="crumbs"><a href="/content?niche={{ draft.niche }}">Drafts · {{ spec.name }}</a> /</div>{% endblock %}
+{% block page_title %}{{ draft.topic }}{% endblock %}
+{% block page_desc %}Gemini draft for {{ draft.channel_name }} · {{ draft.count }} video{{ '' if draft.count == 1 else 's' }} · {{ draft.created_at | when }}{% endblock %}
+{% block page_actions %}{% if draft.status == 'ready' %}<form method="post" action="/drafts/{{ draft.id }}/queue"><button class="btn primary" type="submit" {{ 'disabled' if not draft.valid_count }}>{{ icon('check') }}Add {{ draft.valid_count }} video{{ '' if draft.valid_count == 1 else 's' }} to {{ draft.channel_name }}</button></form>{% endif %}{% endblock %}
+{% block content %}
+{% if draft.status == 'ready' %}
+<div class="row-flex" style="margin-bottom:var(--s5)">
+  <form method="post" action="/drafts/{{ draft.id }}/suggest"><button class="btn" type="submit" title="One Gemini request per video">{{ icon('sparkle') }}Suggestions for all {{ draft['items'] | length }}</button></form>
+  <a class="btn" href="/drafts/{{ draft.id }}/excel">Download as Excel</a>
+  <span class="sp"></span>
+  <form method="post" action="/drafts/{{ draft.id }}/discard" data-confirm="Its videos won't be added to any channel." data-confirm-title="Discard this draft?" data-confirm-ok="Discard" data-confirm-danger><button class="btn ghost danger" type="submit">Discard</button></form>
+</div>
+{% endif %}
+{% if notice %}<div class="notice ok">{{ notice }}</div>{% endif %}
+{% if problem %}<div class="notice bad">{{ problem }}</div>{% endif %}
+
+{% if draft.status == 'generating' %}
+<section class="card" data-draft-poll="{{ draft.id }}">
+  <p><span class="chip accent spin"><span class="i"></span>Writing</span> Gemini is writing {{ draft.count }} {{ spec.items.label }} video{{ '' if draft.count == 1 else 's' }}. This page updates by itself; it usually takes 20–60 seconds.</p>
+  <div class="skeleton-lines" aria-hidden="true"><div class="skeleton"></div><div class="skeleton"></div><div class="skeleton"></div></div>
+</section>
+{% elif draft.status == 'failed' %}
+<section class="card">
+  <div class="notice bad">{{ draft.error }}</div>
+  <a class="btn" href="/content?niche={{ draft.niche }}#generate">Try again</a>
+</section>
+{% else %}
+  {% if draft.status == 'queued' %}<div class="notice ok">These videos were added to {{ draft.channel_name }}'s queue. <a href="/channels/{{ draft.channel_id }}#queue">Open the queue</a></div>{% endif %}
+  {% if draft.status == 'ready' %}
+  <p class="muted" style="margin-bottom:var(--s4)">{{ draft.valid_count }} of {{ draft['items'] | length }} videos pass every check. Read them before adding; failed ones are left out, or fix them in the Excel download and upload it.</p>
+  {% endif %}
+  {% for item in draft['items'] %}
+  {% set r = item.row %}
+  <section class="card section" id="row-{{ loop.index }}">
+    <div class="card-head">
+      <h2>{{ loop.index }}. {{ r.youtube_title or 'Untitled' }}</h2>
+      {% if item.ok %}<span class="chip good"><span class="i">✓</span>Passes checks</span>{% else %}<span class="chip critical"><span class="i">✕</span>Needs fixing</span>{% endif %}
+    </div>
+    {% if item.errors %}<div class="notice bad">{% for e in item.errors %}<div><code>{{ e }}</code></div>{% endfor %}</div>{% endif %}
+    <dl class="kv" style="margin-bottom:var(--s4)">
+      <dt>Description</dt><dd class="pre-line">{{ r.youtube_description }}</dd>
+      <dt>Tags</dt><dd class="secondary">{{ r.youtube_tags }}</dd>
+      {% for f in spec.intro_fields %}<dt>Intro {{ f.key }}</dt><dd>{{ r['intro_' ~ f.key] }}</dd>{% endfor %}
+    </dl>
+    <div class="table-wrap"><table>
+      <thead><tr><th class="r">#</th>{% for f in spec.items.fields if f.kind != 'url' %}<th>{{ f.key | replace('_', ' ') }}</th>{% endfor %}</tr></thead>
+      <tbody>
+      {% for n in range(1, spec.items.max_count + 1) %}
+        {% set prefix = spec.items.prefix ~ n ~ '_' %}
+        {% if r.get(prefix ~ spec.items.fields[0].key) or r.get(prefix ~ spec.items.fields[1].key) %}
+        <tr><td class="r num muted">{{ n }}</td>{% for f in spec.items.fields if f.kind != 'url' %}<td>{{ r.get(prefix ~ f.key, '') }}</td>{% endfor %}</tr>
+        {% endif %}
+      {% endfor %}
+      </tbody>
+    </table></div>
+    {% if draft.status == 'ready' or suggestions.get(loop.index) %}{{ panel(suggestions.get(loop.index), '/drafts/' ~ draft.id ~ '/suggest', loop.index) }}{% endif %}
+  </section>
+  {% endfor %}
+{% endif %}
+{% endblock %}

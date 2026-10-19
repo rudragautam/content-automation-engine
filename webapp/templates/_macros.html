@@ -1,0 +1,112 @@
+{% macro status(s) -%}
+{%- set map = {
+  'ready': ('', '○', 'Content ready'),
+  'rendering': ('accent spin', '', 'Rendering'),
+  'rendered': ('accent', '▶', 'Rendered'),
+  'uploading': ('accent spin', '', 'Uploading'),
+  'scheduled': ('accent', '◷', 'Scheduled'),
+  'published': ('good', '✓', 'Published'),
+  'failed': ('critical', '✕', 'Failed')} -%}
+{%- set c = map.get(s, ('', '•', s)) -%}
+<span class="chip {{ c[0] }}"><span class="i">{{ c[1] }}</span>{{ c[2] }}</span>
+{%- endmacro %}
+
+{% macro connection(s) -%}
+{%- set map = {'connected': ('good', '✓', 'Connected'), 'expired': ('critical', '!', 'Sign-in expired'), 'not_connected': ('warning', '–', 'Not connected')} -%}
+{%- set c = map.get(s, ('', '•', s)) -%}
+<span class="chip {{ c[0] }}"><span class="i">{{ c[1] }}</span>{{ c[2] }}</span>
+{%- endmacro %}
+
+{% macro delta(value, days) -%}
+{%- if value is none -%}<span class="delta">No earlier data</span>
+{%- else -%}<span class="delta {{ 'up' if value > 0 else 'down' if value < 0 }}">{{ '▲' if value > 0 else '▼' if value < 0 else '' }} {{ '%+.1f' % value if (value | round(1)) else '0.0' }}% <span class="muted">vs previous {{ days }} days</span></span>
+{%- endif -%}
+{%- endmacro %}
+
+{% macro range_filter(days, ranges, base) -%}
+<div class="seg" role="group" aria-label="Date range">
+  {% for r in ranges %}<a href="{{ base }}days={{ r }}" class="{{ 'on' if r == days }}" {% if r == days %}aria-current="true"{% endif %}>Last {{ r }} days</a>{% endfor %}
+</div>
+{%- endmacro %}
+
+{% macro queue_row(v, show_channel=false, can_render=false) -%}
+<tr data-video="{{ v.id }}" data-status="{{ v.status }}">
+  <td class="col-when">
+    <span class="when-text num">{{ v.publish_at | when }}</span>
+    {% if v.status in ('ready', 'rendered', 'scheduled', 'failed') %}
+    <button class="btn small ghost edit-btn" data-action="edit-time" type="button" aria-label="Change publish time">Edit</button>
+    <span class="inline-edit">
+      <input type="datetime-local" value="{{ v.publish_at }}" aria-label="New publish time">
+      <button class="btn small primary" data-action="save-time" type="button">Save</button>
+      <button class="btn small" data-action="cancel-time" type="button">Cancel</button>
+    </span>
+    {% endif %}
+  </td>
+  <td>
+    <div class="cell-title clip" title="{{ v.title }}">{{ v.title }}</div>
+    <div class="cell-sub">{% if show_channel %}<a href="/channels/{{ v.channel_id }}">{{ v.channel_name }}</a> · {% endif %}{% if v.is_mock %}mock{% elif v.source and v.source.startswith('Gemini: ') %}written by Gemini · {{ v.source[8:] }}{% elif v.source %}from {{ v.source }}{% elif v.youtube_video_id %}from YouTube{% endif %}{% if v.audio_title %} · ♪ {{ v.audio_title }}{% endif %}</div>
+    {% if v.error %}<div class="cell-sub error">{{ v.error }}</div>{% endif %}
+  </td>
+  <td>{{ status(v.status) }}</td>
+  <td>
+    <div class="actions">
+      {% if v.status in ('ready', 'failed') and v.content_json is defined and v.content_json %}
+        <button class="btn small primary" data-action="render" type="button" {% if not can_render %}disabled title="Rendering for this template isn't built yet"{% endif %}>Render</button>
+      {% endif %}
+      {% if v.status == 'rendered' %}
+        <a class="btn small" href="/media/video/{{ v.id }}" target="_blank" rel="noopener">Preview</a>
+        <button class="btn small primary" data-action="youtube" type="button">{{ 'Schedule (mock)' if v.is_mock else 'Upload to YouTube' }}</button>
+      {% endif %}
+      {% if v.status in ('ready', 'rendered', 'failed') and not v.youtube_video_id and not v.is_mock %}
+        <a class="btn small" href="/videos/{{ v.id }}/suggestions">Suggestions</a>
+      {% endif %}
+      {% if v.youtube_video_id %}
+        <a class="btn small" href="https://studio.youtube.com/video/{{ v.youtube_video_id }}/edit" target="_blank" rel="noopener">Open in Studio</a>
+      {% endif %}
+      {% if v.status not in ('published', 'rendering', 'uploading') and not v.youtube_video_id %}
+        <button class="btn small danger" data-action="delete-video" type="button" aria-label="Remove from queue">Remove</button>
+      {% endif %}
+    </div>
+  </td>
+</tr>
+{%- endmacro %}
+
+{% macro delta_short(value) -%}
+{%- if value is none -%}<span class="muted">—</span>
+{%- else -%}{%- set r = value | round(0) | int -%}
+<span class="delta {{ 'up' if r > 0 else 'down' if r < 0 }}">{{ '▲ ' if r > 0 else '▼ ' if r < 0 }}{{ '%+d' % r if r else '0' }}%</span>
+{%- endif -%}
+{%- endmacro %}
+
+{% macro pager(p, label="items") -%}
+{%- if p.pages > 1 %}
+<nav class="pager" aria-label="Pages">
+  <span class="muted">{{ p.start }}–{{ p.end }} of {{ p.total }} {{ label }}</span>
+  <div class="pager-links">
+    {% if p.number > 1 %}<a class="btn small" href="{{ p.href(p.number - 1) }}" rel="prev">‹ Prev</a>{% else %}<span class="btn small" aria-disabled="true">‹ Prev</span>{% endif %}
+    {% for n in p.window() %}{% if n is none %}<span class="muted gap">…</span>{% elif n == p.number %}<span class="btn small primary" aria-current="page">{{ n }}</span>{% else %}<a class="btn small" href="{{ p.href(n) }}">{{ n }}</a>{% endif %}{% endfor %}
+    {% if p.number < p.pages %}<a class="btn small" href="{{ p.href(p.number + 1) }}" rel="next">Next ›</a>{% else %}<span class="btn small" aria-disabled="true">Next ›</span>{% endif %}
+  </div>
+</nav>
+{%- endif %}
+{%- endmacro %}
+
+{% macro scope_filter(sc, keep={}) -%}
+{#- Global channel filter: created status + one channel. Remembered in cookies across pages. -#}
+<details class="collapse scope-more"{{ " open" if sc.created != "all" }}><summary>More filters</summary>
+<form class="scope-filter" method="get" aria-label="Channel filter">
+  {% for k, v in keep.items() if v %}<input type="hidden" name="{{ k }}" value="{{ v }}">{% endfor %}
+  <select name="created" aria-label="Which channels" onchange="this.form.ch.value='';this.form.submit()">
+    <option value="all" {{ 'selected' if sc.created == 'all' }}>All channels ({{ sc.total }})</option>
+    <option value="live" {{ 'selected' if sc.created == 'live' }}>Created on YouTube ({{ sc.live | length }})</option>
+    <option value="planned" {{ 'selected' if sc.created == 'planned' }}>Not created yet ({{ sc.planned | length }})</option>
+  </select>
+  <select name="ch" aria-label="Channel" onchange="this.form.submit()">
+    <option value="">{{ {'all': 'Every channel', 'live': 'Every created channel', 'planned': 'Every channel not created yet'}[sc.created] }}</option>
+    {% if sc.created != 'planned' and sc.live %}<optgroup label="Created on YouTube">{% for c in sc.live %}<option value="{{ c.id }}" {{ 'selected' if sc.channel and sc.channel.id == c.id }}>{{ c.name }}</option>{% endfor %}</optgroup>{% endif %}
+    {% if sc.created != 'live' and sc.planned %}<optgroup label="Not created yet">{% for c in sc.planned %}<option value="{{ c.id }}" {{ 'selected' if sc.channel and sc.channel.id == c.id }}>{{ c.name }}</option>{% endfor %}</optgroup>{% endif %}
+  </select>
+  <noscript><button class="btn small" type="submit">Apply</button></noscript>
+  {% if sc.active %}<a class="btn small" href="?{{ dict(keep, created='all', ch='') | urlencode }}">Clear</a>{% endif %}
+</form></details>
+{%- endmacro %}

@@ -1,6 +1,7 @@
 """Content generation modes: AUTO, CUSTOM, HYBRID."""
 
 from enum import Enum
+from typing import Tuple
 
 
 class ContentMode(str, Enum):

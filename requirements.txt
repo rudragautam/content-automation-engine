@@ -1,6 +1,23 @@
 # Runtime dependencies
 feedparser
+# Excel content templates (download and upload)
+openpyxl
 
 # Video rendering dependencies
+# After installing, also run: python -m playwright install chromium
 imageio-ffmpeg
-playwright
+playwright>=1.45
+pillow
+
+# Content hub web app (python -m webapp)
+fastapi
+uvicorn
+jinja2
+python-multipart
+tzdata
+# YouTube Data and Analytics APIs (sign-in, upload, stats)
+google-api-python-client
+google-auth-oauthlib
+google-auth-httplib2
+# Gemini API client (also the web app's test client)
+httpx

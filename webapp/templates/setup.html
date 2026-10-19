@@ -1,0 +1,410 @@
+{% extends "base.html" %}
+{% from "_ui.html" import icon %}
+{% block title %}Set up {{ channel.name }}{% endblock %}
+{% block content %}
+<header class="setup-head">
+  <div class="setup-id">
+    {% if live and live.thumbnail %}<img class="setup-avatar" src="{{ live.thumbnail }}" alt="" width="56" height="56" referrerpolicy="no-referrer">{% else %}<span class="setup-avatar placeholder" aria-hidden="true">{{ channel.name[:1] }}</span>{% endif %}
+    <div>
+      <div class="crumbs">Channel setup</div>
+      <h1>{{ live.title if live else channel.name }}</h1>
+      <div class="sub">{% if live and live.handle %}{{ live.handle }} · {% endif %}{{ niche_name(channel.niche) }}</div>
+    </div>
+  </div>
+  <div class="actions">
+    <button class="btn primary" type="button" id="generate-all" data-channel="{{ channel.id }}">{{ icon('sparkle') }}Generate with Gemini</button>
+    {% if live %}<a class="btn small" href="https://www.youtube.com/channel/{{ live.id }}" target="_blank" rel="noopener">View on YouTube ↗</a>{% endif %}
+    <a class="btn small" href="/channels/{{ channel.id }}" id="back-to-hub">Channel page</a>
+    <button class="btn small" type="button" id="close-window">Close</button>
+  </div>
+</header>
+
+<div class="notice gen-status" id="generate-status" role="status" hidden></div>
+{% if notice %}<div class="notice ok" role="status">{{ notice }}</div>{% endif %}
+{% if problem %}<div class="notice bad" role="alert">{{ problem }}</div>{% endif %}
+
+{% if not live %}
+<section class="card" style="margin-bottom:var(--s5)">
+  {% if channel.is_mock %}
+  <p>This is a mock channel; there is nothing on YouTube to set up.</p>
+  {% elif load_error %}
+  <div class="notice bad">Couldn't read the channel from YouTube: {{ load_error }}</div>
+  <a class="btn primary" href="/channels/{{ channel.id }}">Open the channel page to reconnect</a>
+  {% else %}
+  <p class="muted">Create this channel on YouTube and connect it to set its description, banner, trailer and playlists from here. Upload defaults below can be set now.</p>
+  <a class="btn primary" href="/settings#channels">Connect a YouTube channel</a>
+  {% endif %}
+</section>
+{% endif %}
+
+<div class="setup-layout">
+  <nav class="setup-nav" aria-label="Setup sections">
+    <a href="#name">Name &amp; handle</a>
+    {% if live %}
+    <a href="#about">About</a>
+    {% endif %}
+    <a href="#branding">Banner &amp; watermark</a>
+    {% if live %}
+    <a href="#trailer">Channel trailer</a>
+    <a href="#playlists">Playlists</a>
+    {% endif %}
+    <a href="#defaults">Upload defaults</a>
+    <a href="#theme">Theme in the hub</a>
+    {% if live %}<a href="#studio">In YouTube Studio</a>{% endif %}
+    <p class="muted">Each section saves on its own. Writes to YouTube use about 50 of the 10,000 daily API units.</p>
+  </nav>
+
+  <div class="setup-main">
+    <section class="card setup-section" id="name">
+      <div class="card-head"><h2>Name &amp; handle</h2><span class="muted">{{ niche_name(channel.niche) }}</span></div>
+      <p><strong>{{ live.title if live else channel.name }}</strong>{% set h = live.handle if live and live.handle else channel.handle %}{% if h %} <span class="muted">{{ h }}</span>{% endif %}</p>
+      {% if channel.angle %}<p class="muted" style="margin-top:var(--s1)">{{ channel.angle }}</p>{% endif %}
+      {% if live %}
+      <p class="hint" style="margin:var(--s2) 0 var(--s3)">YouTube doesn't let apps change a channel's name or handle. Pick one here, copy it, then change it in
+        <a href="https://studio.youtube.com/channel/{{ live.id }}/editing/profile" target="_blank" rel="noopener">Studio → Customisation → Basic info ↗</a>. The next sync brings it into the hub.</p>
+      {% elif not channel.is_mock %}
+      <p class="hint" style="margin:var(--s2) 0 var(--s3)">Not on YouTube yet, so you can rename it here. Use the same name and handle when you create it on YouTube.</p>
+      {% endif %}
+      {% if not channel.is_mock %}
+      <div class="name-suggest" data-name-suggest data-mode="{{ 'copy' if live else 'rename' }}" data-channel="{{ channel.id }}">
+        <div class="form-row">
+          <label class="field" style="flex:1">Idea for Gemini (optional)
+            <input type="text" data-idea maxlength="300" placeholder="e.g. shorter, Hinglish, for parents">
+          </label>
+          <button class="btn" type="button" data-suggest>{{ icon('sparkle') }}Suggest names</button>
+        </div>
+        <div class="notice gen-status" data-status role="status" hidden></div>
+        <div class="name-cards" data-results></div>
+      </div>
+      {% endif %}
+    </section>
+  {% if live %}
+    <section class="card setup-section" id="about">
+      <div class="card-head"><h2>About</h2><span class="muted">Shown on the channel's About tab and in search</span></div>
+      <form method="post" action="/channels/{{ channel.id }}/setup/about" class="setup-form">
+        <label class="field">Description
+          <textarea name="description" id="about-description" rows="9" maxlength="{{ about_limit }}">{{ live.description }}</textarea>
+          <span class="hint"><span id="about-count">{{ live.description | length }}</span> / {{ about_limit }} characters</span>
+        </label>
+        <label class="field">Keywords
+          <textarea name="keywords" id="about-keywords" rows="3" placeholder="e.g. study tips, focus, productivity">{{ live.keywords | join(', ') }}</textarea>
+          <span class="hint">Separate with commas. Phrases of several words are fine.</span>
+        </label>
+        <div class="form-row">
+          <label class="field">Country
+            <select name="country" id="about-country"><option value="">Not set</option>{% for code, name in countries.items() %}<option value="{{ code }}" {{ 'selected' if live.country == code }}>{{ name }}</option>{% endfor %}</select>
+          </label>
+          <label class="field">Channel language
+            <select name="language" id="about-language"><option value="">Not set</option>{% for code, name in languages.items() %}<option value="{{ code }}" {{ 'selected' if live.language == code }}>{{ name }}</option>{% endfor %}</select>
+          </label>
+        </div>
+        <div class="form-actions"><span></span><button class="btn primary" type="submit">Save to YouTube</button></div>
+      </form>
+    </section>
+
+  {% endif %}
+    <section class="card setup-section" id="branding">
+      <div class="card-head"><h2>Banner &amp; watermark</h2><span class="muted">Make them with Gemini or upload your own</span></div>
+      <div class="form-row art-generate">
+        <label class="field" style="flex:1">Idea for Gemini (optional)
+          <input type="text" id="art-idea" maxlength="300" placeholder="e.g. a friendly lion teacher, bright jungle colours">
+        </label>
+        <button class="btn" type="button" data-generate-art="banner,watermark">{{ icon('sparkle') }}Generate both</button>
+      </div>
+      <div class="notice gen-status" id="art-status" role="status" hidden></div>
+
+      <h3>Banner</h3>
+      <div class="art-pair">
+        <figure>
+          <figcaption class="muted">On YouTube now</figcaption>
+          {% if live and live.banner %}<img class="banner-preview" src="{{ live.banner }}=w1060" alt="Current channel banner" referrerpolicy="no-referrer">{% else %}<div class="empty banner-preview">No banner yet</div>{% endif %}
+        </figure>
+        <figure class="art-draft" id="draft-banner" {{ 'hidden' if not drafts.banner }}>
+          <figcaption><span class="ai-badge">Gemini draft · not on YouTube yet</span></figcaption>
+          <img class="banner-preview" src="{{ drafts.banner or '' }}" alt="Banner drafted by Gemini">
+          <div class="art-actions">
+            {% if live %}
+            <form method="post" action="/channels/{{ channel.id }}/setup/banner"><input type="hidden" name="draft" value="1"><button class="btn primary" type="submit">Upload this banner</button></form>
+            {% endif %}
+            <a class="btn small" href="/channels/{{ channel.id }}/setup/draft/banner?download=1" data-download>Download</a>
+            <form method="post" action="/channels/{{ channel.id }}/setup/draft/banner/discard"><button class="btn small" type="submit">Discard</button></form>
+          </div>
+        </figure>
+      </div>
+      <div class="form-row" style="margin-top:var(--s3)">
+        <button class="btn" type="button" data-generate-art="banner">{{ icon('sparkle') }}Generate banner</button>
+        {% if live %}
+        <form method="post" action="/channels/{{ channel.id }}/setup/banner" enctype="multipart/form-data" class="form-row" style="flex:1">
+          <label class="field" style="flex:1">Or upload your own (JPG or PNG)
+            <input type="file" name="file" accept="image/jpeg,image/png" required>
+          </label>
+          <button class="btn primary" type="submit">Upload banner</button>
+        </form>
+        {% endif %}
+      </div>
+      <p class="hint">2560×1440 works best (at least 2048×1152, 16:9, up to 6 MB). Keep text and logos in the centre 1546×423; that part shows on every device. Gemini's drafts follow this.</p>
+
+      <h3 style="margin-top:var(--s5)">Watermark</h3>
+      <p class="muted" style="margin-bottom:var(--s2)">A small image, usually a subscribe button, shown in the corner of every video on the channel. Viewers who click it can subscribe.</p>
+      <figure class="art-draft" id="draft-watermark" {{ 'hidden' if not drafts.watermark }}>
+        <figcaption><span class="ai-badge">Gemini draft · not on YouTube yet</span></figcaption>
+        <div class="watermark-previews">
+          <img class="watermark-preview" src="{{ drafts.watermark or '' }}" alt="Watermark drafted by Gemini" width="160" height="160">
+          <div class="watermark-on-video"><img src="{{ drafts.watermark or '' }}" alt="" width="44" height="44"><span class="muted">How it looks on a video</span></div>
+        </div>
+        <div class="art-actions">
+          {% if live %}
+          <form method="post" action="/channels/{{ channel.id }}/setup/watermark" class="form-row">
+            <input type="hidden" name="draft" value="1">
+            <select name="timing" aria-label="When it shows"><option value="end">For the last 15 seconds</option><option value="start">For the whole video</option></select>
+            <button class="btn primary" type="submit">Set this watermark</button>
+          </form>
+          {% endif %}
+          <a class="btn small" href="/channels/{{ channel.id }}/setup/draft/watermark?download=1" data-download>Download</a>
+          <form method="post" action="/channels/{{ channel.id }}/setup/draft/watermark/discard"><button class="btn small" type="submit">Discard</button></form>
+        </div>
+      </figure>
+      <div class="form-row">
+        <button class="btn" type="button" data-generate-art="watermark">{{ icon('sparkle') }}Generate watermark</button>
+        {% if live %}
+        <form method="post" action="/channels/{{ channel.id }}/setup/watermark" enctype="multipart/form-data" class="form-row" style="flex:1">
+          <label class="field" style="flex:1">Or upload your own (square PNG, JPG or GIF, at least 150×150, up to 1 MB)
+            <input type="file" name="file" accept="image/png,image/jpeg,image/gif" required>
+          </label>
+          <label class="field">Show it
+            <select name="timing"><option value="end">For the last 15 seconds</option><option value="start">For the whole video</option></select>
+          </label>
+          <button class="btn primary" type="submit">Set watermark</button>
+        </form>
+        {% endif %}
+      </div>
+      {% if live %}
+      <form method="post" action="/channels/{{ channel.id }}/setup/watermark/remove" style="margin-top:var(--s2)" data-confirm="It disappears from every video on this channel." data-confirm-title="Remove the watermark?" data-confirm-ok="Remove" data-confirm-danger>
+        <button class="btn small ghost danger" type="submit">Remove watermark</button>
+        <span class="hint">YouTube doesn't let apps read back the current watermark, so it isn't previewed here.</span>
+      </form>
+      {% else %}
+      <p class="hint">Once the channel is connected you can put these on YouTube from here. Until then, download them for YouTube Studio.</p>
+      {% endif %}
+    </section>
+  {% if live %}
+
+    <section class="card setup-section" id="trailer">
+      <div class="card-head"><h2>Channel trailer</h2><span class="muted">Plays for visitors who haven't subscribed</span></div>
+      {% if videos %}
+      <form method="post" action="/channels/{{ channel.id }}/setup/trailer" class="form-row">
+        <label class="field" style="flex:1">Trailer video
+          <select name="video_id" id="trailer-video">
+            <option value="">No trailer</option>
+            {% for v in videos %}<option value="{{ v.id }}" {{ 'selected' if live.trailer == v.id }}>{{ v.title }}</option>{% endfor %}
+          </select>
+        </label>
+        <button class="btn primary" type="submit">Save to YouTube</button>
+      </form>
+      {% else %}
+      <div class="empty">No public videos yet. Once one is public, you can make it the trailer here.</div>
+      {% endif %}
+    </section>
+
+    <section class="card setup-section" id="playlists">
+      <div class="card-head"><h2>Playlists</h2><span class="muted">{{ playlists | length }}</span></div>
+      {% if playlists %}
+      <div class="table-wrap"><table>
+        <thead><tr><th>Playlist</th><th>Visibility</th><th class="r">Videos</th><th></th></tr></thead>
+        <tbody>{% for p in playlists %}
+          <tr><td><a class="cell-title" href="https://www.youtube.com/playlist?list={{ p.id }}" target="_blank" rel="noopener">{{ p.title }}</a></td>
+            <td class="secondary">{{ privacy.get(p.privacy, p.privacy) }}</td><td class="r num">{{ p.count }}</td>
+            <td class="r">{% if prefs.playlist_id == p.id %}<span class="chip good"><span class="i">✓</span>New uploads go here</span>{% endif %}</td></tr>
+        {% endfor %}</tbody>
+      </table></div>
+      <form method="post" action="/channels/{{ channel.id }}/setup/upload-playlist" class="form-row" style="margin-top:var(--s3)">
+        <label class="field" style="flex:1">Add every new upload to
+          <select name="playlist_id">
+            <option value="">No playlist</option>
+            {% for p in playlists %}<option value="{{ p.id }}" {{ 'selected' if prefs.playlist_id == p.id }}>{{ p.title }}</option>{% endfor %}
+          </select>
+        </label>
+        <button class="btn" type="submit">Save</button>
+      </form>
+      {% else %}<div class="empty">No playlists yet.</div>{% endif %}
+
+      <h3 style="margin-top:var(--s5)">New playlist</h3>
+      <form method="post" action="/channels/{{ channel.id }}/setup/playlist" class="setup-form">
+        <div class="form-row">
+          <label class="field" style="flex:2;min-width:220px">Title
+            <input type="text" name="title" id="playlist-title" required maxlength="150" placeholder="e.g. Daily Focus Habits">
+          </label>
+          <label class="field">Visibility
+            <select name="privacy">{% for k, v in privacy.items() %}<option value="{{ k }}">{{ v }}</option>{% endfor %}</select>
+          </label>
+        </div>
+        <label class="field">Description (optional)
+          <textarea name="description" id="playlist-description" rows="2" maxlength="5000"></textarea>
+        </label>
+        <div class="form-actions">
+          <label class="check"><input type="checkbox" name="use_for_uploads" value="yes" {{ 'checked' if not prefs.playlist_id }}> Add every new upload to it</label>
+          <button class="btn primary" type="submit">Create on YouTube</button>
+        </div>
+      </form>
+    </section>
+  {% endif %}
+
+    <section class="card setup-section" id="defaults">
+      <div class="card-head"><h2>Upload defaults</h2><span class="muted">Saved in the hub, applied to every upload</span></div>
+      {% if live and live.made_for_kids %}<div class="notice">YouTube has this whole channel set as <strong>made for kids</strong>, so every video on it is treated that way, whatever you choose below. Change it in <a href="https://studio.youtube.com/channel/{{ live.id }}/editing/defaults" target="_blank" rel="noopener">Studio → Settings → Channel → Advanced</a>.</div>{% endif %}
+      <form method="post" action="/channels/{{ channel.id }}/setup/defaults" class="setup-form">
+        <div class="form-row">
+          <label class="field">Category
+            <select name="category_id" id="defaults-category">{% for k, v in categories.items() %}<option value="{{ k }}" {{ 'selected' if prefs.category_id == k }}>{{ v }}</option>{% endfor %}</select>
+          </label>
+          <label class="field">Video language
+            <select name="language" id="defaults-language">{% for k, v in languages.items() %}<option value="{{ k }}" {{ 'selected' if prefs.language == k }}>{{ v }}</option>{% endfor %}</select>
+          </label>
+        </div>
+        <fieldset class="field">
+          <legend>Made for kids?</legend>
+          <label class="check"><input type="radio" name="made_for_kids" value="no" {{ 'checked' if not prefs.made_for_kids }}> No</label>
+          <label class="check"><input type="radio" name="made_for_kids" value="yes" {{ 'checked' if prefs.made_for_kids }}> Yes, made for children</label>
+          <span class="hint">Required by US law (COPPA). "Yes" turns off comments and personalised ads on the video.</span>
+        </fieldset>
+        <fieldset class="field">
+          <legend>Altered or synthetic content</legend>
+          <label class="check"><input type="radio" name="synthetic_media" value="yes" {{ 'checked' if prefs.synthetic_media }}> Declare it (recommended: scripts are AI-written)</label>
+          <label class="check"><input type="radio" name="synthetic_media" value="no" {{ 'checked' if not prefs.synthetic_media }}> Don't declare</label>
+        </fieldset>
+        <label class="field">Tags added to every video
+          <input type="text" name="default_tags" id="defaults-tags" value="{{ prefs.default_tags | join(', ') }}" placeholder="e.g. {{ channel.name | lower }}, shorts">
+          <span class="hint">Comma separated; added after each video's own tags.</span>
+        </label>
+        <label class="field">Text added to the end of every description
+          <textarea name="description_footer" id="defaults-footer" rows="4" maxlength="1000" placeholder="e.g. Subscribe for a new video every day.&#10;#shorts">{{ prefs.description_footer }}</textarea>
+        </label>
+        <div class="form-actions"><span></span><button class="btn primary" type="submit">Save defaults</button></div>
+      </form>
+    </section>
+
+    <section class="card setup-section" id="theme">
+      <div class="card-head"><h2>Theme in the hub</h2><span class="muted">only changes how the hub looks</span></div>
+      <p class="muted">The whole hub wears this palette while {{ channel.name }} is the active channel. Light or dark is set with the moon button and works with every palette.</p>
+      <div class="pal theme-swatches" role="group" aria-label="Theme for {{ channel.name }}" data-palette-picker data-channel="{{ channel.id }}">
+        {% for key, (label, c1, c2) in palettes.items() %}
+        <button type="button" data-p="{{ key }}" aria-pressed="{{ 'true' if key == palette else 'false' }}" aria-label="{{ label }} palette" title="{{ label }}"><i style="background:linear-gradient(135deg,{{ c1 }},{{ c2 }})"></i><span>{{ label }}</span></button>
+        {% endfor %}
+      </div>
+      <div class="row-flex" style="margin-top:var(--s3)"><button class="icon-btn" type="button" id="theme-toggle" aria-label="Switch between light and dark">{{ icon('moon', cls='theme-dark') }}{{ icon('sun', cls='theme-light') }}</button><span class="muted">Light or dark</span></div>
+    </section>
+
+  {% if live %}
+    <section class="card setup-section" id="studio">
+      <div class="card-head"><h2>In YouTube Studio</h2><span class="muted">YouTube doesn't let apps change these</span></div>
+      <ul class="studio-links">
+        <li><span>Channel name</span><a href="https://studio.youtube.com/channel/{{ live.id }}/editing/profile" target="_blank" rel="noopener">Change in Studio ↗</a></li>
+        <li><span>@handle</span><a href="https://studio.youtube.com/channel/{{ live.id }}/editing/profile" target="_blank" rel="noopener">Change in Studio ↗</a></li>
+        <li><span>Profile picture</span><a href="https://studio.youtube.com/channel/{{ live.id }}/editing/profile" target="_blank" rel="noopener">Change in Studio ↗</a></li>
+        <li><span>Monetisation &amp; verification</span><a href="https://studio.youtube.com/channel/{{ live.id }}/monetization" target="_blank" rel="noopener">Open in Studio ↗</a></li>
+      </ul>
+    </section>
+  {% endif %}
+  </div>
+</div>
+
+<script>
+(() => {
+  const close = document.getElementById("close-window");
+  // Opened as a separate window: Close shuts it. Opened as a normal tab: go back to the channel.
+  close.addEventListener("click", () => { if (window.opener) window.close(); else location.href = document.getElementById("back-to-hub").href; });
+  if (window.opener) { try { window.opener.focus; } catch (e) {} }
+
+  const desc = document.getElementById("about-description"), count = document.getElementById("about-count");
+  desc?.addEventListener("input", () => { count.textContent = desc.value.length; });
+
+  // One click fills every text field; nothing reaches YouTube until a section's Save is pressed.
+  const gen = document.getElementById("generate-all"), genStatus = document.getElementById("generate-status");
+  const touched = new Set();
+  function put(id, value) {
+    const field = document.getElementById(id);
+    if (!field || value === undefined || value === null || value === "") return;
+    if (field.tagName === "SELECT" && ![...field.options].some((o) => o.value === value)) return;
+    field.value = value;
+    field.classList.add("ai-filled");
+    touched.add(field.closest(".setup-section"));
+  }
+  function check(name, value) {
+    const radio = document.querySelector(`input[name="${name}"][value="${value}"]`);
+    if (!radio) return;
+    radio.checked = true;
+    radio.closest("fieldset").classList.add("ai-filled");
+    touched.add(radio.closest(".setup-section"));
+  }
+  // Banner and watermark: Gemini draws drafts that show next to what's live; Upload puts one on YouTube.
+  const artStatus = document.getElementById("art-status"), artButtons = document.querySelectorAll("[data-generate-art]");
+  async function generateArt(kinds) {
+    artButtons.forEach((b) => { b.disabled = true; });
+    artStatus.hidden = false; artStatus.className = "notice gen-status";
+    artStatus.textContent = `Gemini is making the ${kinds.replace(",", " and ")}… this takes about 15–40 seconds.`;
+    try {
+      const body = new FormData();
+      body.append("kinds", kinds);
+      body.append("idea", document.getElementById("art-idea").value);
+      const res = await fetch(`/api/channels/${gen.dataset.channel}/setup/generate-art`, { method: "POST", body });
+      const data = await res.json();
+      if (!res.ok) throw new Error(data.error || "Gemini couldn't make it.");
+      for (const [kind, url] of Object.entries(data.drafts)) {
+        const box = document.getElementById(`draft-${kind}`);
+        box.querySelectorAll("img").forEach((img) => { img.src = url; });
+        box.hidden = false;
+      }
+      artStatus.className = "notice ok gen-status";
+      artStatus.textContent = (data.how === "artwork" ? "Gemini painted it. " : "Gemini designed it and the hub drew it at YouTube's exact size. ") +
+        "It's a draft: upload it, download it, or press Generate again for another one." + (data.note ? " " + data.note : "");
+    } catch (e) {
+      artStatus.className = "notice bad gen-status"; artStatus.textContent = e.message;
+    }
+    artButtons.forEach((b) => { b.disabled = false; });
+  }
+  artButtons.forEach((b) => b.addEventListener("click", () => generateArt(b.dataset.generateArt)));
+
+  gen.addEventListener("click", async () => {
+    gen.disabled = true;
+    generateArt("banner,watermark");
+    genStatus.hidden = false; genStatus.className = "notice gen-status";
+    genStatus.textContent = "Gemini is writing the channel setup… this takes about 10–20 seconds.";
+    try {
+      const res = await fetch(`/api/channels/${gen.dataset.channel}/setup/generate`, { method: "POST" });
+      const data = await res.json();
+      if (!res.ok) throw new Error(data.error || "Gemini couldn't write it.");
+      touched.clear();
+      document.querySelectorAll(".ai-filled").forEach((el) => el.classList.remove("ai-filled"));
+      put("about-description", data.about.description);
+      if (desc) count.textContent = desc.value.length;
+      put("about-keywords", data.about.keywords.join(", "));
+      put("about-country", data.about.country);
+      put("about-language", data.about.language);
+      put("trailer-video", data.trailer_video_id);
+      put("playlist-title", data.playlist.title);
+      put("playlist-description", data.playlist.description);
+      const d = data.upload_defaults;
+      put("defaults-category", d.category_id);
+      put("defaults-language", d.language);
+      check("made_for_kids", d.made_for_kids ? "yes" : "no");
+      check("synthetic_media", d.synthetic_media ? "yes" : "no");
+      put("defaults-tags", d.default_tags.join(", "));
+      put("defaults-footer", d.description_footer);
+      document.querySelectorAll(".ai-badge").forEach((b) => b.remove());
+      touched.forEach((section) => {
+        const badge = document.createElement("span");
+        badge.className = "ai-badge"; badge.textContent = "Filled by Gemini · review and save";
+        section.querySelector(".card-head").appendChild(badge);
+      });
+      genStatus.className = "notice ok gen-status";
+      genStatus.textContent = `Gemini filled ${touched.size} section${touched.size === 1 ? "" : "s"}. Nothing is on YouTube yet: read each one, edit what you like, then press its Save button.` +
+        (data.upload_defaults.made_for_kids ? " It marked the videos as made for kids; check that before saving." : "");
+      [...touched][0]?.scrollIntoView({ behavior: "smooth", block: "start" });
+    } catch (e) {
+      genStatus.className = "notice bad gen-status"; genStatus.textContent = e.message;
+    }
+    gen.disabled = false;
+  });
+})();
+</script>
+{% endblock %}

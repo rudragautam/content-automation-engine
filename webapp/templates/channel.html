@@ -1,0 +1,134 @@
+{% extends "base.html" %}
+{% from "_macros.html" import delta_short, connection, delta, range_filter, queue_row, status, pager %}
+{% from "_suggest.html" import change_log %}
+{% from "_reports.html" import history_table %}
+{% from "_ui.html" import icon, stat, ring, empty_state, issue %}
+{% block title %}{{ channel.name }}{% endblock %}
+{% block crumbs %}<div class="crumbs"><a href="/?created=all&ch=">All channels</a> /</div>{% endblock %}
+{% block page_title %}{{ channel.name }}{% endblock %}
+{% block page_desc %}{% if channel.handle %}{{ channel.handle }} · {% endif %}{{ niche_name(channel.niche) }} · {{ connection(channel.connection) }}{% endblock %}
+{% block page_actions %}{% if not channel.is_mock and channel.youtube_channel_id and channel.connection == 'connected' and not (audit and audit.status == 'running') %}<a class="btn primary" href="#analysis">{{ icon('optimizer') }}Run analysis</a>{% endif %}{% endblock %}
+{% block content %}
+{% if notice %}<div class="notice ok" role="status">{{ notice }}</div>{% endif %}
+{% if problem %}<div class="notice bad" role="alert">{{ problem }}</div>{% endif %}
+
+{% if channel.is_mock %}
+<p class="muted">Mock channel: stats are simulated and nothing is uploaded.</p>
+{% elif channel.connection != 'connected' %}
+<section class="card" style="margin-bottom:var(--s5)">
+  <h2>{{ 'Reconnect' if channel.connection == 'expired' else 'Connect' }} this channel to YouTube</h2>
+  <p class="muted">{% if channel.connection == 'expired' %}YouTube's sign-in for this channel expired or was revoked, so uploads are paused.{% else %}Sign in with the Google account that owns this channel, then pick <strong>{{ channel.name }}</strong> on Google's channel list.{% endif %}</p>
+  {% if client_ready %}
+    <a class="btn primary" href="/oauth/start?channel={{ channel.id }}">Connect with Google</a>
+  {% else %}
+    <a class="btn" href="/settings">Set up the Google OAuth client first</a>
+  {% endif %}
+</section>
+{% else %}
+<div class="row-flex" style="margin-bottom:var(--s5)">
+  <a class="btn" href="/channels/{{ channel.id }}/setup" target="setup-{{ channel.id }}" data-setup-window>{{ icon('settings') }}Set up channel ↗</a>
+  <button class="btn" data-action="sync" data-channel="{{ channel.id }}" type="button">{{ icon('upload') }}Sync from YouTube</button>
+  <span class="muted small">Last sync {{ channel.last_synced_at | when }}</span>
+  <span class="sp"></span>
+  <button class="btn ghost danger" data-action="disconnect" data-channel="{{ channel.id }}" type="button">Disconnect</button>
+</div>
+{% endif %}
+
+<div class="filters" style="margin-bottom:var(--s4)">{{ range_filter(days, ranges, "/channels/" ~ channel.id ~ "?") }}</div>
+<section class="tiles" aria-label="Last {{ days }} days">
+  {% call stat('Views', kpis.views | compact, 'views') %}{{ delta(kpis.views_delta, days) }}{% endcall %}
+  {% call stat('Subscribers', kpis.subscribers | compact, 'users') %}<span class="delta">{{ kpis.net_subs | signed }} net in {{ days }} days</span>{% endcall %}
+  {% call stat('Watch hours', kpis.watch_hours | compact, 'clock') %}{{ delta(kpis.watch_delta, days) }}{% endcall %}
+  {% call stat('Videos published', kpis.published, 'upload') %}<span class="delta">in {{ days }} days</span>{% endcall %}
+</section>
+
+{% if not channel.is_mock and channel.youtube_channel_id %}
+<section class="card section" id="analysis">
+  <div class="card-head"><h2>AI Optimizer</h2><span class="muted">why videos get few views, and what to change</span></div>
+  {% if audit and audit.status == 'running' %}
+    <p><span class="chip accent spin"><span class="i"></span>Analysing</span> <a href="/channels/{{ channel.id }}/analysis/{{ audit.id }}">Open the analysis</a></p>
+  {% elif audit and audit.status == 'ready' %}
+    <div class="score">
+      {{ ring(audit.score, 'Channel score') }}
+      <div style="flex:1;min-width:220px">
+        <p class="muted">Last analysis {{ audit.finished_at | when }}</p>
+        {% for f in audit.report.findings if f.severity != 'info' %}{% if loop.index <= 3 %}{{ issue(f.severity, f.title, '') }}{% endif %}{% else %}{{ issue('info', 'No problems found by the checks', '') }}{% endfor %}
+        <a class="btn" href="/channels/{{ channel.id }}/analysis/{{ audit.id }}">Open report and suggestions</a>
+      </div>
+    </div>
+  {% elif audit and audit.status == 'failed' %}
+    <div class="notice bad">The last analysis failed: {{ audit.error }}</div>
+  {% else %}
+    <p class="muted">Reads this channel's analytics from YouTube (read-only), runs fixed checks with real numbers, then asks Gemini for better titles, descriptions and tags for the weakest videos. Nothing changes on YouTube until you approve it.</p>
+  {% endif %}
+  {% if audits | length > 1 %}
+  <details class="more audit-history"><summary>Earlier analyses ({{ audits | length - 1 }})</summary>
+    {{ history_table(audits, channel.id, audits[0]) }}
+  </details>
+  {% endif %}
+  {% if not audit or audit.status != 'running' %}
+  <form method="post" action="/channels/{{ channel.id }}/analysis" class="form-row" style="margin-top:var(--s4)">
+    <label class="field">Write suggestions for
+      <select name="video_limit">
+        <option value="10">The 10 weakest videos</option>
+        <option value="0">Every video</option>
+      </select>
+    </label>
+    <button class="btn primary" type="submit" {{ 'disabled title="Connect the channel first"' if channel.connection != 'connected' }}>{{ icon('optimizer') }}Run analysis</button>
+  </form>
+  {% endif %}
+</section>
+{{ change_log(changes, '/channels/' ~ channel.id) }}
+{% endif %}
+
+<div class="grid cols-3 section">
+  <section class="card span-2">
+    <div class="card-head"><h2>Daily views</h2><span class="muted">last {{ days }} days</span></div>
+    <div class="chart" data-chart="line" data-src="views-data" data-label="Daily views for {{ channel.name }}"></div>
+    <script type="application/json" id="views-data">{{ series | tojson_safe }}</script>
+  </section>
+  <section class="card" data-slots="{{ channel.id }}">
+    <h2>Publish slots</h2>
+    <p class="muted">New content fills these times in order, when it has no publish time of its own.</p>
+    <div class="slot-list form-row" style="margin:var(--s3) 0">
+      {% for s in slots %}<input type="time" value="{{ s }}" aria-label="Publish slot">{% endfor %}
+    </div>
+    <div class="form-row">
+      <button class="btn small" data-action="add-slot" type="button">{{ icon('plus', cls='sm') }}Add slot</button>
+      <button class="btn small primary" data-action="save-slots" type="button">Save slots</button>
+    </div>
+    <p class="muted small" style="margin-top:var(--s3)">Clear a time to remove that slot, then save.</p>
+  </section>
+</div>
+
+<section class="card section" id="queue">
+  <div class="card-head"><h2>Queue and schedule</h2><a href="/content?niche={{ channel.niche }}">Add content</a></div>
+  {% if queue %}
+  <div class="table-wrap"><table>
+    <thead><tr><th>Publish time</th><th>Video</th><th>Status</th><th class="r">Actions</th></tr></thead>
+    <tbody>{% for v in queue %}{{ queue_row(v, false, can_render) }}{% endfor %}</tbody>
+  </table></div>
+  {{ pager(queue, "videos") }}
+  {% else %}{{ empty_state('Nothing queued', "Upload a content sheet or write videos with Gemini to fill this channel's slots.", '/content?niche=' ~ channel.niche, 'Add content', 'schedule') }}{% endif %}
+</section>
+
+<div class="grid cols-2 section">
+  <section class="card">
+    <div class="card-head"><h2>Top videos</h2><span class="muted">last {{ days }} days</span></div>
+    {% if top %}
+    <div class="table-wrap"><table>
+      <thead><tr><th>Video</th><th class="r">Views</th><th class="r">Avg viewed</th><th class="r">Likes</th></tr></thead>
+      <tbody>{% for v in top %}
+        <tr><td><div class="cell-title clip" title="{{ v.title }}">{{ v.title }}</div><div class="cell-sub">{{ v.publish_at | when }}</div></td>
+        <td class="r num">{{ v.views | compact }}</td><td class="r num">{{ ('%.0f%%' % v.avg_view_pct) if v.avg_view_pct is not none else '—' }}</td><td class="r num">{{ v.likes | compact }}</td></tr>
+      {% endfor %}</tbody>
+    </table></div>
+    {% else %}{{ empty_state('No published videos in this period', '', none, none, 'media') }}{% endif %}
+  </section>
+  <section class="card">
+    <div class="card-head"><h2>When videos do best</h2><span class="muted">avg views per video, last 90 days</span></div>
+    <div class="chart" data-chart="heatmap" data-src="heat-data"></div>
+    <script type="application/json" id="heat-data">{{ heatmap | tojson_safe }}</script>
+  </section>
+</div>
+{% endblock %}

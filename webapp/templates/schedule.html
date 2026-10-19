@@ -1,0 +1,26 @@
+{% extends "base.html" %}
+{% from "_ui.html" import icon, empty_state %}
+{% from "_macros.html" import queue_row, pager, scope_filter %}
+{% block title %}Schedule{% endblock %}
+{% block page_title %}Schedule{% endblock %}
+{% block page_desc %}What goes out in the next 14 days{% if scope.active %} on {{ scope.label }}{% endif %}{% if items.total %} · {{ items.total }} video{{ '' if items.total == 1 else 's' }}{% endif %}. Change any time with Edit.{% endblock %}
+{% block page_actions %}<a class="btn primary" href="/content">{{ icon('plus') }}Add content</a>{% endblock %}
+{% block content %}
+<div class="filters" style="margin-bottom:var(--s5)">{{ scope_filter(scope) }}</div>
+
+<div class="notice">YouTube API quota today: {{ quota.used | compact }} of {{ quota.limit | compact }} units used, so about {{ quota.uploads_left }} more uploads fit. Each upload costs about 1,600 units, shared by all channels.</div>
+
+{% for day, items in groups.items() %}
+<section class="day-group">
+  <h3>{{ (day ~ 'T00:00') | when | replace(', 00:00', '') }} · {{ day_totals[day] }} video{{ '' if day_totals[day] == 1 else 's' }}{% if items | length < day_totals[day] %} <span class="muted small">(split across pages)</span>{% endif %}</h3>
+  <div class="card">
+    <div class="table-wrap"><table>
+      <tbody>{% for v in items %}{{ queue_row(v, true, v.niche in renderable) }}{% endfor %}</tbody>
+    </table></div>
+  </div>
+</section>
+{% else %}
+<div class="card">{{ empty_state("Nothing scheduled in the next 14 days", "Queue content and it shows up here by day.", "/content", "Add content", "schedule") }}</div>
+{% endfor %}
+{{ pager(items, "videos") }}
+{% endblock %}
