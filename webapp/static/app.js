@@ -1,16 +1,7 @@
 import { mountAll } from "./charts.js";
+import { confirmDialog, toast } from "./js/shell.js";
 
-const toastEl = document.createElement("div");
-toastEl.className = "toast";
-toastEl.setAttribute("role", "status");
-document.body.appendChild(toastEl);
-let toastTimer;
-export function toast(text) {
-  toastEl.textContent = text;
-  toastEl.classList.add("show");
-  clearTimeout(toastTimer);
-  toastTimer = setTimeout(() => toastEl.classList.remove("show"), 3200);
-}
+export { toast };
 
 async function post(url, body) {
   const res = await fetch(url, { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify(body || {}) });
@@ -19,14 +10,6 @@ async function post(url, body) {
   return data;
 }
 
-// Theme: OS setting by default, toggle stored per browser.
-const root = document.documentElement;
-try { const t = localStorage.getItem("hub-theme"); if (t) root.dataset.theme = t; } catch (e) {}
-document.getElementById("theme-toggle")?.addEventListener("click", () => {
-  const dark = root.dataset.theme ? root.dataset.theme === "dark" : matchMedia("(prefers-color-scheme: dark)").matches;
-  root.dataset.theme = dark ? "light" : "dark";
-  try { localStorage.setItem("hub-theme", root.dataset.theme); } catch (e) {}
-});
 
 document.addEventListener("click", async (e) => {
   const btn = e.target.closest("[data-action]");
@@ -70,16 +53,16 @@ document.addEventListener("click", async (e) => {
       toast(`Synced ${res.days} days of stats and ${res.videos} videos`);
       setTimeout(() => location.reload(), 900);
     } else if (action === "disconnect") {
-      if (!confirm("Disconnect this channel? Uploads stop until you connect it again.")) return;
+      if (!(await confirmDialog({ title: "Disconnect this channel?", text: "Uploads to it stop until you connect it again.", ok: "Disconnect", danger: true }))) return;
       await post(`/api/channels/${btn.dataset.channel}/disconnect`);
       location.reload();
     } else if (action === "delete-video") {
-      if (!confirm("Remove this video from the queue?")) return;
+      if (!(await confirmDialog({ title: "Remove this video from the queue?", text: row.querySelector(".cell-title")?.textContent || "", ok: "Remove", danger: true }))) return;
       await post(`/api/videos/${id}/delete`);
       row.remove();
       toast("Removed from the queue");
     } else if (action === "delete-audio") {
-      if (!confirm("Delete this track? Videos already rendered keep their audio.")) return;
+      if (!(await confirmDialog({ title: "Delete this track?", text: "Videos already rendered keep their audio.", ok: "Delete", danger: true }))) return;
       await post(`/api/audio/${btn.dataset.id}/delete`);
       btn.closest("tr").remove();
       toast("Track deleted");
@@ -202,12 +185,55 @@ document.querySelectorAll("[data-suggest-form]").forEach((form) => {
     if (!t) bad.push("The title is empty.");
     problems.hidden = !bad.length;
     problems.textContent = bad.join(" ");
-    form.querySelector("[data-apply]").disabled = bad.length > 0;
+    // Apply stays off until the change fits YouTube's limits and the approval box is ticked.
+    form.querySelector("[data-apply]").disabled = bad.length > 0 || !form.querySelector("[data-approve]").checked;
     form.querySelectorAll("[data-title-option]").forEach((b) => b.classList.toggle("on", b.dataset.titleOption === t));
   };
   form.querySelectorAll("[data-title-option]").forEach((b) => b.addEventListener("click", () => { title.value = b.dataset.titleOption; update(); }));
   [title, description, tags].forEach((el) => el.addEventListener("input", update));
+  form.querySelector("[data-approve]").addEventListener("change", update);
   update();
+  // Apply asks once more, showing exactly what changes.
+  form.addEventListener("submit", async (e) => {
+    if (form.dataset.confirmed) return;
+    e.preventDefault();
+    const box = document.createElement("div");
+    box.className = "modal-change";
+    const line = (cls, text) => { const p = document.createElement("p"); p.className = cls; p.textContent = text; box.append(p); };
+    const before = form.dataset.beforeTitle || "";
+    const after = title.value.split(/\s+/).join(" ").trim();
+    if (before && before !== after) line("was", before);
+    line("now", after);
+    const note = document.createElement("p");
+    note.className = "muted";
+    note.textContent = "remote" in form.dataset
+      ? "The description and tags are replaced too. Privacy and Made for Kids stay as they are; the old version is backed up and Roll back restores it."
+      : "The description and tags are replaced too, in the hub. They go to YouTube with the upload; Undo restores the old version.";
+    box.append(note);
+    const yes = await confirmDialog({ title: "remote" in form.dataset ? "Change this video on YouTube?" : "Apply this change?", html: box,
+      ok: "remote" in form.dataset ? "Apply to YouTube" : "Apply" });
+    if (!yes) return;
+    form.dataset.confirmed = "1";
+    form.submit();
+  });
+});
+
+// Analysis report: a link to one video (#s-12) opens its row; filter chips show one kind of video.
+const openFromHash = () => {
+  const row = location.hash.length > 1 && document.querySelector(`details.video-row#${CSS.escape(location.hash.slice(1))}`);
+  if (row) { row.open = true; row.scrollIntoView({ block: "start" }); }
+};
+openFromHash();
+window.addEventListener("hashchange", openFromHash);
+document.querySelectorAll("[data-video-filter]").forEach((bar) => {
+  bar.addEventListener("click", (e) => {
+    const b = e.target.closest("button[data-filter]");
+    if (!b) return;
+    bar.querySelectorAll("button").forEach((x) => x.classList.toggle("on", x === b));
+    document.querySelectorAll("details.video-row").forEach((row) => {
+      row.hidden = b.dataset.filter !== "all" && row.dataset.state !== b.dataset.filter;
+    });
+  });
 });
 
 mountAll();

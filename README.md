@@ -154,6 +154,70 @@ Limits:
 - The channel's language and Made for Kids setting come from **Setup → Upload defaults**.
   A channel with no saved defaults is treated as its niche's language.
 
+## Design system
+
+The hub uses a glass design: frosted cards over a soft gradient with blurred colour blobs.
+It works in light and dark, at every width from a 360 px phone up.
+
+**Themes.** There are 7 palettes: Sunset, Aurora, Blossom, Forest, Midnight, Ember and
+Graphite.
+- **Per channel:** each channel stores its palette in `channels.theme`. Empty means Ember.
+- **Whole app:** the app wears the active channel's palette through
+  `<html data-palette="…">`.
+- **Changing it:** use the swatches in the top bar or in **Set up channel → Theme in the
+  hub**. Both save through `POST /api/channels/{id}/theme`.
+- **Light or dark:** follows the system, or the moon/sun toggle. The choice is remembered
+  in the browser (`localStorage["hub-theme"]`) and works with every palette.
+
+**Tokens** (`webapp/static/css/tokens.css`):
+- **Palette values:** the approved values, `--bg1`, `--bg2`, `--blob1-3`, `--glass`,
+  `--line`, `--text`, `--muted`, `--coral`, `--teal`, `--amber`, `--red` and
+  `--btn1/2`, for each palette in light and dark.
+- **Semantic tokens** derived from them:
+  - `--primary` (button gradient)
+  - `--ink-muted` and `--link`: text colours mixed until they pass WCAG AA on glass
+  - `--card-bg` and `--tint`: a stronger backing under long text and tables
+  - type sizes from `--fs-xs` (14 px, the smallest anywhere) to `--fs-page` (30 px)
+  - spacing `--s1` to `--s8`, radii, `--blur`, `--tap` (48 px targets) and motion timings
+- **Without backdrop-filter**, cards fall back to a solid, slightly see-through
+  background.
+
+**Styles** (`webapp/static/css/`):
+- `base.css`: reset, type, background, focus and reduced motion.
+- `layout.css`: the shell (left navigation, top bar, Channels menu and drawer, phone tab
+  bar).
+- `components.css`: buttons, inputs, toggles, tabs, badges, notices, stat cards, score
+  ring, problem cards, tables (stacked cards on phones), dialogs, toasts, empty states,
+  skeletons and chart styles.
+- `pages.css`: page-specific pieces.
+
+**Templates:**
+- `base.html`: the shell.
+- `_ui.html`: macros `icon`, `stat`, `ring`, `empty_state` and `issue`.
+- `_macros.html`: status chips, deltas, filters and queue rows.
+- `_suggest.html` and `_reports.html`: AI Optimizer pieces.
+
+**Scripts:**
+- `static/js/shell.js`: theme toggle, Channels drawer, palette swatches, `confirmDialog()`,
+  `toast()`, and labelling table cells for the stacked phone layout.
+- A form with `data-confirm="…"` (plus optional `data-confirm-title`, `-ok`, `-danger`)
+  asks in the glass dialog first.
+- `webapp/shell.py` decides the active channel and where each Channels menu entry leads.
+
+**Adding a page:**
+1. Make it extend `base.html`.
+2. Fill `{% block page_title %}`, `{% block page_desc %}` (one line) and, for its single
+   main action, `{% block page_actions %}` with one `btn primary`.
+3. Put content in `{% block content %}`, grouped into `<section class="card">` with a
+   `card-head` and an `<h2>`.
+4. Use the `_ui.html` macros for stats, empty states and scores, and `table-wrap` for
+   tables, which stack on phones automatically.
+5. Put rarely used options in `<details class="more">`.
+6. Add the page to `SECTIONS` in `webapp/shell.py`, so the right navigation item lights up.
+
+The font is Plus Jakarta Sans (SIL Open Font License), bundled in `static/fonts`, so the hub
+works offline.
+
 ## Test
 
 ```bash

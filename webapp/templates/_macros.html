@@ -31,10 +31,10 @@
 
 {% macro queue_row(v, show_channel=false, can_render=false) -%}
 <tr data-video="{{ v.id }}" data-status="{{ v.status }}">
-  <td style="min-width:190px">
+  <td class="col-when">
     <span class="when-text num">{{ v.publish_at | when }}</span>
     {% if v.status in ('ready', 'rendered', 'scheduled', 'failed') %}
-    <button class="btn small edit-btn" data-action="edit-time" type="button" aria-label="Change publish time">Edit</button>
+    <button class="btn small ghost edit-btn" data-action="edit-time" type="button" aria-label="Change publish time">Edit</button>
     <span class="inline-edit">
       <input type="datetime-local" value="{{ v.publish_at }}" aria-label="New publish time">
       <button class="btn small primary" data-action="save-time" type="button">Save</button>
@@ -45,7 +45,7 @@
   <td>
     <div class="cell-title clip" title="{{ v.title }}">{{ v.title }}</div>
     <div class="cell-sub">{% if show_channel %}<a href="/channels/{{ v.channel_id }}">{{ v.channel_name }}</a> · {% endif %}{% if v.is_mock %}mock{% elif v.source and v.source.startswith('Gemini: ') %}written by Gemini · {{ v.source[8:] }}{% elif v.source %}from {{ v.source }}{% elif v.youtube_video_id %}from YouTube{% endif %}{% if v.audio_title %} · ♪ {{ v.audio_title }}{% endif %}</div>
-    {% if v.error %}<div class="cell-sub" style="color:var(--critical-ink)">{{ v.error }}</div>{% endif %}
+    {% if v.error %}<div class="cell-sub error">{{ v.error }}</div>{% endif %}
   </td>
   <td>{{ status(v.status) }}</td>
   <td>
@@ -93,6 +93,7 @@
 
 {% macro scope_filter(sc, keep={}) -%}
 {#- Global channel filter: created status + one channel. Remembered in cookies across pages. -#}
+<details class="collapse scope-more"{{ " open" if sc.created != "all" }}><summary>More filters</summary>
 <form class="scope-filter" method="get" aria-label="Channel filter">
   {% for k, v in keep.items() if v %}<input type="hidden" name="{{ k }}" value="{{ v }}">{% endfor %}
   <select name="created" aria-label="Which channels" onchange="this.form.ch.value='';this.form.submit()">
@@ -107,5 +108,5 @@
   </select>
   <noscript><button class="btn small" type="submit">Apply</button></noscript>
   {% if sc.active %}<a class="btn small" href="?{{ dict(keep, created='all', ch='') | urlencode }}">Clear</a>{% endif %}
-</form>
+</form></details>
 {%- endmacro %}

@@ -1,0 +1,127 @@
+/* Design tokens. Everything visual reads from these variables.
+
+   Palettes: <html data-palette="ember|sunset|aurora|blossom|forest|midnight|graphite">
+   Light / dark: automatic from the system, or <html data-theme="light|dark"> from the toggle.
+   The palette values below are the approved preview's, unchanged. Sunset is the base :root set;
+   every other palette overrides it. */
+
+@font-face {
+  font-family: "Plus Jakarta Sans";
+  src: url("/static/fonts/plus-jakarta-sans-latin.woff2") format("woff2");
+  font-weight: 400 800; font-style: normal; font-display: swap;
+  unicode-range: U+0000-00FF, U+0131, U+0152-0153, U+02BB-02BC, U+02C6, U+02DA, U+02DC, U+0304, U+0308, U+0329, U+2000-206F, U+20AC, U+2122, U+2191, U+2193, U+2212, U+2215, U+FEFF, U+FFFD;
+}
+@font-face {
+  font-family: "Plus Jakarta Sans";
+  src: url("/static/fonts/plus-jakarta-sans-latin-ext.woff2") format("woff2");
+  font-weight: 400 800; font-style: normal; font-display: swap;
+  unicode-range: U+0100-02BA, U+02BD-02C5, U+02C7-02CC, U+02CE-02D7, U+02DD-02FF, U+0304, U+0308, U+0329, U+1D00-1DBF, U+1E00-1E9F, U+1EF2-1EFF, U+2020, U+20A0-20AB, U+20AD-20C0, U+2113, U+2C60-2C7F, U+A720-A7FF;
+}
+
+/* Background colours animate when the palette changes (browsers without @property just switch). */
+@property --bg1 { syntax: "<color>"; inherits: true; initial-value: #0c0606; }
+@property --bg2 { syntax: "<color>"; inherits: true; initial-value: #2b1010; }
+
+/* ---------- palettes (from the approved preview) ---------- */
+
+:root {
+  --bg1: #120e2b; --bg2: #2b1a5e; --blob1: #ff6b81; --blob2: #2fd8c3; --blob3: #8a5cff;
+  --glass: rgba(255,255,255,.09); --glass-strong: rgba(255,255,255,.15); --line: rgba(255,255,255,.2);
+  --text: #f6f3ff; --muted: #bfb7de; --coral: #ff7a85; --coral2: #ff9a6b; --teal: #3fe0cb; --amber: #ffc65c; --red: #ff6b7a;
+  --shadow: 0 18px 50px rgba(8,4,30,.45); --radius: 22px;
+  color-scheme: dark;
+}
+@media (prefers-color-scheme: light) { :root:not([data-theme="dark"]) {
+  --bg1: #fff1ee; --bg2: #e6ddff; --blob1: #ff9aa8; --blob2: #7fe6d6; --blob3: #b79cff;
+  --glass: rgba(255,255,255,.55); --glass-strong: rgba(255,255,255,.8); --line: rgba(255,255,255,.9);
+  --text: #231a45; --muted: #6a5f93; --coral: #ec4f64; --coral2: #f08a4b; --teal: #0e9f8e; --amber: #c98100; --red: #d63a4d;
+  --shadow: 0 18px 40px rgba(90,60,160,.18); color-scheme: light; } }
+:root[data-theme="dark"] { color-scheme: dark; }
+
+/* Aurora: blue + mint */
+:root[data-palette="aurora"] { --bg1: #051a24; --bg2: #0e3b57; --blob1: #2f7bff; --blob2: #22d3a6; --blob3: #ffc65c; --text: #eefaff; --muted: #a9c6d6; --coral: #5aa9ff; --coral2: #36e0c0; --btn1: #2563eb; --btn2: #0f766e; }
+:root[data-palette="aurora"] .b3 { opacity: .32; }
+/* Blossom: pink + violet */
+:root[data-palette="blossom"] { --bg1: #1d0b2e; --bg2: #4a1a6b; --blob1: #ff5fa2; --blob2: #b36bff; --blob3: #7aa2ff; --text: #fff4fb; --muted: #d9b8e6; --coral: #ff7ac0; --coral2: #c58bff; --btn1: #d6336c; --btn2: #7c3aed; }
+/* Forest: green + gold */
+:root[data-palette="forest"] { --bg1: #08201a; --bg2: #1d4a33; --blob1: #34d399; --blob2: #a3e635; --blob3: #ffc65c; --text: #effaf0; --muted: #a8c9b0; --coral: #7ee08f; --coral2: #f5c451; --btn1: #15803d; --btn2: #b45309; }
+:root[data-palette="forest"] .b2 { opacity: .3; }
+/* Midnight: near-black + electric violet / cyan */
+:root[data-palette="midnight"] { --bg1: #04050c; --bg2: #0d1236; --blob1: #6d5dfc; --blob2: #00c2ff; --blob3: #ff4fd8; --text: #f1f2ff; --muted: #a6a9d6; --coral: #9a8cff; --coral2: #35d0ff; --btn1: #5b4be8; --btn2: #0a7fc2; }
+/* Ember: charcoal + orange / amber (the default) */
+:root[data-palette="ember"] { --bg1: #0c0606; --bg2: #2b1010; --blob1: #ff5a36; --blob2: #ffb020; --blob3: #c2185b; --text: #fff3ec; --muted: #d4b3a5; --coral: #ff8a5c; --coral2: #ffc14d; --btn1: #c2410c; --btn2: #b45309; }
+:root[data-palette="midnight"] .b1, :root[data-palette="ember"] .b1 { opacity: .4; }
+/* Graphite: grey-black + teal, amber glow */
+:root[data-palette="graphite"] { --bg1: #0b0d0e; --bg2: #1d2326; --blob1: #14b8a6; --blob2: #f5a623; --blob3: #4b5563; --text: #eef2f3; --muted: #a7b3b8; --coral: #2dd4bf; --coral2: #f5b942; --btn1: #0f766e; --btn2: #115e59; }
+:root[data-palette="graphite"] .b1 { opacity: .4; }
+:root[data-palette="graphite"] .b2 { opacity: .28; }
+
+@media (prefers-color-scheme: light) {
+  :root[data-palette="aurora"]:not([data-theme="dark"]) { --bg1: #e8f6ff; --bg2: #dcf7ee; --blob1: #7cc0ff; --blob2: #7fe6c8; --blob3: #ffd98a; --text: #0e2a3a; --muted: #4f6b7c; --coral: #2563eb; --coral2: #0f9488; --teal: #0e9f8e; }
+  :root[data-palette="blossom"]:not([data-theme="dark"]) { --bg1: #fff0f7; --bg2: #efe3ff; --blob1: #ff9fc9; --blob2: #d2a8ff; --blob3: #9ec5ff; --text: #3a1450; --muted: #7a5890; --coral: #d6336c; --coral2: #8b46e0; --teal: #0e9f8e; }
+  :root[data-palette="forest"]:not([data-theme="dark"]) { --bg1: #effaf0; --bg2: #f6f1d9; --blob1: #8fe3a3; --blob2: #d4ee8a; --blob3: #ffd98a; --text: #12301f; --muted: #55705c; --coral: #15803d; --coral2: #b45309; --teal: #0e9f8e; }
+  :root[data-palette="midnight"]:not([data-theme="dark"]) { --bg1: #f0f1ff; --bg2: #e2e8ff; --blob1: #b3abff; --blob2: #8fdcff; --blob3: #ffb3ec; --text: #1a1c40; --muted: #5a5d8c; --coral: #5b4be8; --coral2: #0a7fc2; --teal: #0e9f8e; }
+  :root[data-palette="ember"]:not([data-theme="dark"]) { --bg1: #fff3ec; --bg2: #ffe6d6; --blob1: #ffa88a; --blob2: #ffd27a; --blob3: #f19bbd; --text: #3b1710; --muted: #86594b; --coral: #c2410c; --coral2: #b45309; --teal: #0e9f8e; }
+  :root[data-palette="graphite"]:not([data-theme="dark"]) { --bg1: #f1f4f5; --bg2: #e3e9eb; --blob1: #7fe0d3; --blob2: #ffd98a; --blob3: #c3ccd1; --text: #172023; --muted: #566469; --coral: #0f766e; --coral2: #b45309; --teal: #0e9f8e; }
+}
+:root[data-theme="light"] {
+  --bg1: #fff1ee; --bg2: #e6ddff; --blob1: #ff9aa8; --blob2: #7fe6d6; --blob3: #b79cff;
+  --glass: rgba(255,255,255,.55); --glass-strong: rgba(255,255,255,.8); --line: rgba(255,255,255,.9);
+  --text: #231a45; --muted: #6a5f93; --coral: #ec4f64; --coral2: #f08a4b; --teal: #0e9f8e; --amber: #c98100; --red: #d63a4d;
+  --shadow: 0 18px 40px rgba(90,60,160,.18); color-scheme: light;
+}
+:root[data-palette="aurora"][data-theme="light"] { --bg1: #e8f6ff; --bg2: #dcf7ee; --blob1: #7cc0ff; --blob2: #7fe6c8; --blob3: #ffd98a; --text: #0e2a3a; --muted: #4f6b7c; --coral: #2563eb; --coral2: #0f9488; --teal: #0e9f8e; }
+:root[data-palette="blossom"][data-theme="light"] { --bg1: #fff0f7; --bg2: #efe3ff; --blob1: #ff9fc9; --blob2: #d2a8ff; --blob3: #9ec5ff; --text: #3a1450; --muted: #7a5890; --coral: #d6336c; --coral2: #8b46e0; --teal: #0e9f8e; }
+:root[data-palette="forest"][data-theme="light"] { --bg1: #effaf0; --bg2: #f6f1d9; --blob1: #8fe3a3; --blob2: #d4ee8a; --blob3: #ffd98a; --text: #12301f; --muted: #55705c; --coral: #15803d; --coral2: #b45309; --teal: #0e9f8e; }
+:root[data-palette="midnight"][data-theme="light"] { --bg1: #f0f1ff; --bg2: #e2e8ff; --blob1: #b3abff; --blob2: #8fdcff; --blob3: #ffb3ec; --text: #1a1c40; --muted: #5a5d8c; --coral: #5b4be8; --coral2: #0a7fc2; --teal: #0e9f8e; }
+:root[data-palette="ember"][data-theme="light"] { --bg1: #fff3ec; --bg2: #ffe6d6; --blob1: #ffa88a; --blob2: #ffd27a; --blob3: #f19bbd; --text: #3b1710; --muted: #86594b; --coral: #c2410c; --coral2: #b45309; --teal: #0e9f8e; }
+:root[data-palette="graphite"][data-theme="light"] { --bg1: #f1f4f5; --bg2: #e3e9eb; --blob1: #7fe0d3; --blob2: #ffd98a; --blob3: #c3ccd1; --text: #172023; --muted: #566469; --coral: #0f766e; --coral2: #b45309; --teal: #0e9f8e; }
+
+/* ---------- semantic tokens, derived from the palette ---------- */
+
+:root {
+  /* actions: one primary gradient per palette */
+  /* Sunset has no button colours of its own in the preview; these keep white text at 4.5:1 or more */
+  --primary-1: var(--btn1, #c93a50);
+  --primary-2: var(--btn2, #c25425);
+  --primary: linear-gradient(135deg, var(--primary-1), var(--primary-2));
+  --primary-glow: 0 10px 24px color-mix(in srgb, var(--primary-1) 45%, transparent);
+  /* text roles: the palette colours mixed toward the text colour until they pass WCAG AA on glass */
+  --ink-muted: color-mix(in srgb, var(--text) 35%, var(--muted));
+  --link: color-mix(in srgb, var(--text) 45%, var(--coral));
+  /* dark cards sit on a little of the darkest background colour, so text stays readable over bright blobs */
+  --card-bg: linear-gradient(var(--glass), var(--glass)), color-mix(in srgb, var(--bg1) 45%, transparent);
+  /* status */
+  --success: var(--teal);
+  --warning: var(--amber);
+  --danger: var(--red);
+  --success-wash: color-mix(in srgb, var(--teal) 20%, transparent);
+  --warning-wash: color-mix(in srgb, var(--amber) 22%, transparent);
+  --danger-wash: color-mix(in srgb, var(--red) 20%, transparent);
+  --accent-wash: color-mix(in srgb, var(--coral) 18%, transparent);
+  /* a stronger tint under long text and tables, so they stay readable over the gradient */
+  --tint: color-mix(in srgb, var(--bg1) 42%, transparent);
+  --inset: color-mix(in srgb, var(--bg1) 30%, transparent);
+  --focus: var(--teal);
+
+  /* type: nothing below 14px */
+  --font: "Plus Jakarta Sans", system-ui, -apple-system, "Segoe UI", Roboto, "Nirmala UI", "Noto Sans Devanagari", sans-serif;
+  --fs-xs: 14px; --fs-sm: 15px; --fs-base: 17px; --fs-lg: 18px; --fs-xl: 20px; --fs-2xl: 22px; --fs-page: 30px; --fs-stat: 36px;
+  --lh: 1.55;
+
+  /* space, shape, depth, motion */
+  --s1: 4px; --s2: 8px; --s3: 12px; --s4: 16px; --s5: 20px; --s6: 24px; --s8: 32px;
+  --r-sm: 12px; --r-md: 16px; --r-lg: var(--radius); --r-pill: 999px;
+  --blur: blur(20px) saturate(140%);
+  --tap: 48px;
+  --fast: .15s; --med: .2s; --slow: .3s;
+  --highlight: inset 0 1px 0 rgba(255,255,255,.18);
+}
+:root[data-theme="light"] { --tint: rgba(255,255,255,.55); --inset: rgba(255,255,255,.6); --highlight: inset 0 1px 0 rgba(255,255,255,.9); --ink-muted: var(--muted); --link: color-mix(in srgb, var(--text) 30%, var(--coral)); --card-bg: var(--glass); }
+@media (prefers-color-scheme: light) { :root:not([data-theme="dark"]) { --tint: rgba(255,255,255,.55); --inset: rgba(255,255,255,.6); --highlight: inset 0 1px 0 rgba(255,255,255,.9); --ink-muted: var(--muted); --link: color-mix(in srgb, var(--text) 30%, var(--coral)); --card-bg: var(--glass); } }
+/* Midnight's second button colour, a touch deeper so white text passes 4.5:1 */
+:root[data-palette="midnight"] { --primary-2: #0874b0; }
+
+/* the palette's background eases into a new channel's palette */
+:root { transition: --bg1 var(--slow) ease, --bg2 var(--slow) ease; }
+@media (prefers-reduced-motion: reduce) { :root { transition: none; } }

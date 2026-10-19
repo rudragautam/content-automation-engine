@@ -611,12 +611,15 @@ def view(conn, s) -> Dict[str, Any]:
     if out["blocked"]:
         return out
     out["current"] = metadata_apply.current(conn, s)
-    if out["package"] and out["package"]["titles"]:
+    # The form starts from what was applied, if anything was; otherwise from Gemini's first title.
+    if s["status"] == "applied" and s["applied_json"]:
+        out["form"] = json.loads(s["applied_json"])
+    elif out["package"] and out["package"]["titles"]:
         p = out["package"]
-        out["preview"] = metadata_apply.preview(conn, s, p["titles"][0], p["description"], p["tags"])
-    elif s["status"] == "applied" and s["applied_json"]:
-        a = json.loads(s["applied_json"])
-        out["preview"] = metadata_apply.preview(conn, s, a["title"], a["description"], a["tags"])
+        out["form"] = {"title": p["titles"][0], "description": p["description"], "tags": p["tags"]}
+    if out.get("form"):
+        f = out["form"]
+        out["preview"] = metadata_apply.preview(conn, s, f["title"], f["description"], f["tags"])
     if s["before_json"]:
         out["before"] = json.loads(s["before_json"])
     return out

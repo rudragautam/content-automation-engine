@@ -1,5 +1,6 @@
 {% extends "base.html" %}
 {% from "_macros.html" import connection %}
+{% from "_ui.html" import icon, empty_state %}
 {% block title %}Settings{% endblock %}
 {% macro niche_select(c) -%}
 <form method="post" action="/settings/channels/{{ c.id }}/niche" class="niche-form">
@@ -12,26 +13,22 @@
 <a class="cell-title" href="/channels/{{ c.id }}">{{ c.name }}</a>{% if c.handle %} <span class="muted">{{ c.handle }}</span>{% endif %}
 {% if c.angle %}<div class="muted channel-angle">{{ c.angle }}</div>{% endif %}
 {%- endmacro %}
+{% block page_title %}Settings{% endblock %}
+{% block page_desc %}Your channels, the Google accounts they sign in with, and the keys the hub needs.{% endblock %}
 {% block content %}
-<div class="page-head">
-  <div>
-    <h1>Settings</h1>
-    <div class="sub">Your channels, the Google accounts they sign in with, and the keys the hub needs.</div>
-  </div>
-</div>
 {% if notice %}<div class="notice ok">{{ notice }}</div>{% endif %}
 {% if problem %}<div class="notice bad">{{ problem }}</div>{% endif %}
 
 <div class="setup-checklist">
-  <a class="check-item" href="#google">
+  <a class="check-item glass" href="#google">
     {% if client.present and (client.redirect_ok or client.use_instead) %}<span class="chip good"><span class="i">✓</span>Ready</span>{% else %}<span class="chip warning"><span class="i">!</span>Needed</span>{% endif %}
     <strong>Google sign-in</strong><span class="muted">{% if client.use_instead %}Works at {{ client.use_instead }}{% else %}OAuth client that lets channels sign in{% endif %}</span>
   </a>
-  <a class="check-item" href="#gemini">
+  <a class="check-item glass" href="#gemini">
     {% if gemini.configured %}<span class="chip good"><span class="i">✓</span>Ready</span>{% else %}<span class="chip warning"><span class="i">!</span>Needed</span>{% endif %}
     <strong>Gemini</strong><span class="muted">{{ gemini.model if gemini.configured else 'Writes scripts, names and channel setup' }}</span>
   </a>
-  <a class="check-item" href="#channels">
+  <a class="check-item glass" href="#channels">
     <span class="chip {{ 'good' if on_youtube else 'warning' }}"><span class="i">{{ on_youtube | length }}</span>on YouTube</span>
     {% set known = accounts | selectattr(0) | list | length %}
     <strong>Channels</strong><span class="muted">{{ known }} Google account{{ '' if known == 1 else 's' }} known · {{ planned | length }} planned</span>
@@ -44,7 +41,7 @@
   <div class="notice">You opened the hub at an address Google doesn't know. Sign-ins only work at
     <a href="{{ client.use_instead }}/settings"><strong>{{ client.use_instead }}</strong></a>; open the hub there to connect or reconnect.</div>
   {% endif %}
-  <p class="secondary" style="margin-bottom:14px">There's no single logged-in account. Each channel signs in to YouTube on its own, so channels from different Google accounts work side by side. The hub uploads to a channel with that channel's own sign-in.</p>
+  <p class="muted" style="margin-bottom:var(--s4)">There's no single logged-in account. Each channel signs in to YouTube on its own, so channels from different Google accounts work side by side. The hub uploads to a channel with that channel's own sign-in.</p>
 
   <div class="add-choices">
     <div class="add-choice">
@@ -56,7 +53,7 @@
           <select name="niche" required>{% for k, name in niche_options %}<option value="{{ k }}">{{ name }}</option>{% endfor %}</select>
         </label>
         <label class="field">Publish times <input type="text" name="slots" value="19:00" placeholder="09:00, 19:00" size="12"></label>
-        <button class="btn primary" type="submit">Connect with Google</button>
+        <button class="btn primary" type="submit">{{ icon('link') }}Connect with Google</button>
       </form>
       {% else %}
       <p class="secondary">Set up <a href="#google">Google sign-in</a> first.</p>
@@ -65,13 +62,13 @@
     <div class="add-choice">
       <h3>Want a new channel?</h3>
       <p class="muted">Plan it here with a name from Gemini. Then create it on YouTube with that name, and press <strong>Connect</strong> on its row below.</p>
-      <a class="btn" href="#plan" onclick="document.getElementById('plan').open = true">✨ Plan a new channel</a>
+      <a class="btn" href="#plan" onclick="document.getElementById('plan').open = true">{{ icon('sparkle') }}Plan a new channel</a>
     </div>
   </div>
 
   <h3 class="group-title">On YouTube <span class="muted">· {{ on_youtube | length }}</span></h3>
   {% if not on_youtube %}
-  <div class="empty">No channels connected yet. Use “Connect with Google” above.</div>
+  {{ empty_state('No channels connected yet', 'Use Connect with Google above to add one.', none, none, 'channels') }}
   {% endif %}
   {% for account, items in accounts %}
   <div class="account-group">
@@ -126,11 +123,11 @@
     {% endfor %}</tbody>
   </table></div>
   {% else %}
-  <div class="empty">No planned channels. Plan one below.</div>
+  {{ empty_state('No planned channels', 'Plan one below with a name from Gemini.', none, none, 'sparkle') }}
   {% endif %}
 
   <details class="plan-panel" id="plan">
-    <summary><strong>✨ Plan a new channel</strong> <span class="muted">Gemini suggests names for a niche; a niche can have several channels, each with its own angle.</span></summary>
+    <summary>{{ icon('sparkle') }}<strong>Plan a new channel</strong> <span class="muted">Gemini suggests names for a niche; a niche can have several channels, each with its own angle.</span></summary>
     <div class="name-suggest" data-name-suggest data-mode="fill" data-niche-from="#plan-niche" data-form="#plan-form">
       <div class="form-row">
         <label class="field">Niche
@@ -139,12 +136,12 @@
         <label class="field" style="flex:1;min-width:220px">Idea for Gemini (optional)
           <input type="text" data-idea maxlength="300" placeholder="e.g. Hindi, for kids 6–10, animal stories">
         </label>
-        <button class="btn" type="button" data-suggest>✨ Suggest names</button>
+        <button class="btn" type="button" data-suggest>{{ icon('sparkle') }}Suggest names</button>
       </div>
       <div class="notice gen-status" data-status role="status" hidden></div>
       <div class="name-cards" data-results></div>
     </div>
-    <form method="post" action="/settings/channels" class="form-row" id="plan-form" style="margin-top:10px">
+    <form method="post" action="/settings/channels" class="form-row" id="plan-form" style="margin-top:var(--s3)">
       <label class="field">Channel name <input type="text" name="name" required maxlength="100" placeholder="e.g. Focus Daily"></label>
       <label class="field">@handle <input type="text" name="handle" maxlength="31" placeholder="@focusdaily"></label>
       <label class="field" style="flex:1;min-width:220px">Angle <input type="text" name="angle" maxlength="160" placeholder="Who it's for and what makes it different"></label>
@@ -155,8 +152,8 @@
 
   {% if mock_channels %}
   <h3 class="group-title">Mock (simulated) <span class="muted">· {{ mock_channels | length }}</span></h3>
-  <p class="secondary">Simulated channels with made-up stats. Remove them once your real channels are added; your own content stays.</p>
-  <form method="post" action="/settings/remove-mock" style="margin-top:8px" onsubmit="return confirm('Remove all {{ mock_count }} mock channels and their simulated data? This can’t be undone.')">
+  <p class="muted">Simulated channels with made-up stats. Remove them once your real channels are added; your own content stays.</p>
+  <form method="post" action="/settings/remove-mock" style="margin-top:var(--s2)" data-confirm="All {{ mock_count }} mock channels and their simulated data are removed. This can't be undone." data-confirm-title="Remove mock data?" data-confirm-ok="Remove" data-confirm-danger>
     <button class="btn danger" type="submit">Remove mock data</button>
   </form>
   {% endif %}
@@ -169,9 +166,9 @@
   <div class="grid cols-2">
     <div>
       {% if gemini.configured %}
-        <p class="secondary">Key <code>{{ gemini.masked }}</code>{% if gemini.from_env %} (from the GEMINI_API_KEY environment variable){% endif %}.</p>
+        <p class="muted">Key <code>{{ gemini.masked }}</code>{% if gemini.from_env %} (from the GEMINI_API_KEY environment variable){% endif %}.</p>
         {% if gemini.models %}
-        <form method="post" action="/settings/gemini/model" class="form-row" style="margin-bottom:12px">
+        <form method="post" action="/settings/gemini/model" class="form-row" style="margin-bottom:var(--s3)">
           <label class="field" style="flex:1 1 220px">Model
             <select name="model" style="width:100%">{% for m in gemini.models %}<option value="{{ m.id }}" {{ 'selected' if m.id == gemini.model }}>{{ m.name }} ({{ m.id }})</option>{% endfor %}</select>
           </label>
@@ -186,18 +183,18 @@
         <button class="btn primary" type="submit">Save and test</button>
       </form>
       {% if gemini.configured and not gemini.from_env %}
-      <form method="post" action="/settings/gemini/remove" style="margin-top:10px" onsubmit="return confirm('Remove the Gemini key from this PC?')">
-        <button class="btn small danger" type="submit">Remove key</button>
+      <form method="post" action="/settings/gemini/remove" style="margin-top:var(--s3)" data-confirm="Gemini features stop working until you add a key again." data-confirm-title="Remove the Gemini key from this PC?" data-confirm-ok="Remove key" data-confirm-danger>
+        <button class="btn small ghost danger" type="submit">Remove key</button>
       </form>
       {% endif %}
     </div>
     <div>
-      <p class="secondary">Gemini writes video scripts, channel names, the channel setup text and the banner and watermark. Each is one request to the model picked here.</p>
-      <ol class="steps" style="margin-top:8px">
+      <p class="muted">Gemini writes video scripts, channel names, the channel setup text and the banner and watermark. Each is one request to the model picked here.</p>
+      <ol class="steps" style="margin-top:var(--s2)">
         <li>Create a key at <a href="https://aistudio.google.com/apikey" target="_blank" rel="noopener">Google AI Studio → API keys</a>.</li>
         <li>Paste it here. The hub tests it and picks the newest <strong>Flash-Lite</strong> model, the cheapest that does these jobs well.</li>
       </ol>
-      <p class="muted" style="margin-top:8px;font-size:12.5px">Stored only on this PC in <code>output/hub/secrets/</code>. On the free tier Google may use prompts to improve its products and image models aren't included.</p>
+      <p class="muted small" style="margin-top:var(--s2)">Stored only on this PC in <code>output/hub/secrets/</code>. On the free tier Google may use prompts to improve its products and image models aren't included.</p>
     </div>
   </div>
 </section>
@@ -207,7 +204,7 @@
     <summary class="card-head summary-head"><h2>Google sign-in (OAuth client)</h2>
       {% if client.present %}<span class="chip good"><span class="i">✓</span>Client saved</span> <span class="muted">{{ client.client_id }}</span>{% else %}<span class="chip warning"><span class="i">–</span>Not set up</span>{% endif %}
     </summary>
-    <p class="secondary" style="margin:10px 0">One-time setup. This is the hub's own “app” in Google Cloud. It isn't a channel or an account: every channel and every Google account signs in through it.</p>
+    <p class="muted" style="margin:var(--s3) 0">One-time setup. This is the hub's own “app” in Google Cloud. It isn't a channel or an account: every channel and every Google account signs in through it.</p>
     {% if client.use_instead %}
     <div class="notice">This client is registered for <a href="{{ client.use_instead }}/settings">{{ client.use_instead }}</a>. Open the hub at that address to sign in, or add <code>{{ client.redirect_uri }}</code> to the client's Authorized redirect URIs in Google Cloud.</div>
     {% elif client.present and not client.redirect_ok %}
@@ -225,13 +222,13 @@
           </label>
           <button class="btn primary" type="submit">{{ 'Replace' if client.present else 'Save' }}</button>
         </form>
-        <form method="post" action="/settings/client" enctype="multipart/form-data" class="form-row" style="margin-top:10px">
+        <form method="post" action="/settings/client" enctype="multipart/form-data" class="form-row" style="margin-top:var(--s3)">
           <label class="field">Or upload the OAuth client JSON
             <input type="file" name="file" accept=".json,application/json" required>
           </label>
           <button class="btn" type="submit">Upload file</button>
         </form>
-        <p class="muted" style="margin-top:8px;font-size:12.5px">Stored only on this PC, in <code>output/hub/secrets/</code>, which git ignores. Channels already connected keep working after you switch clients.</p>
+        <p class="muted small" style="margin-top:var(--s2)">Stored only on this PC, in <code>output/hub/secrets/</code>, which git ignores. Channels already connected keep working after you switch clients.</p>
       </div>
       <ol class="steps">
         <li>Open <a href="https://console.cloud.google.com/projectcreate" target="_blank" rel="noopener">Google Cloud</a> and create a project, e.g. “Content Hub”.</li>
@@ -241,7 +238,7 @@
         <li>Paste the Client ID and secret on the left.</li>
       </ol>
     </div>
-    <p class="muted" style="margin-top:8px;font-size:12.5px">While the app is in testing mode Google expires sign-ins after 7 days, so channels need Reconnect weekly. Publishing the app (and passing YouTube's API audit) removes that limit and lets uploads go public.</p>
+    <p class="muted small" style="margin-top:var(--s2)">While the app is in testing mode Google expires sign-ins after 7 days, so channels need Reconnect weekly. Publishing the app (and passing YouTube's API audit) removes that limit and lets uploads go public.</p>
   </details>
 </section>
 {% endblock %}

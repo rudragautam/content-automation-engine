@@ -1,55 +1,85 @@
 {% extends "base.html" %}
 {% from "_suggest.html" import panel, change_log %}
 {% from "_reports.html" import history_table, diff_metrics, diff_findings, change_results %}
+{% from "_ui.html" import icon, stat, ring, empty_state %}
 {% block title %}Analysis · {{ channel.name }}{% endblock %}
+{% block crumbs %}<div class="crumbs"><a href="/channels/{{ channel.id }}#analysis">{{ channel.name }}</a> /</div>{% endblock %}
+{% block page_title %}AI Optimizer{% endblock %}
+{% block page_desc %}Analysis from {{ audit.started_at | when }}{% if audit.report %}: the last {{ audit.report.period }} days, per video the last {{ audit.report.video_days }}{% endif %}.{% endblock %}
+{% block page_actions %}<form method="post" action="/channels/{{ channel.id }}/analysis" class="form-row">
+    <select name="video_limit" aria-label="Videos to write suggestions for">
+      <option value="10">10 weakest videos</option>
+      <option value="0">Every video</option>
+    </select>
+    <button class="btn primary" type="submit" {{ 'disabled' if audit.status == 'running' }}>{{ icon('optimizer') }}Run again</button>
+  </form>{% endblock %}
 {% block content %}
 {% set r = audit.report %}
-<div class="page-head">
-  <div>
-    <div class="muted" style="font-size:12.5px"><a href="/channels/{{ channel.id }}#analysis">{{ channel.name }}</a> /</div>
-    <h1>Channel analysis</h1>
-    <div class="sub">{{ audit.started_at | when }}{% if r %} · numbers for the last {{ r.period }} days, per video the last {{ r.video_days }} days{% endif %}</div>
-  </div>
-  <form method="post" action="/channels/{{ channel.id }}/analysis" class="form-row">
-    <select name="video_limit" aria-label="Videos to write suggestions for">
-      <option value="10">Suggestions for the 10 weakest videos</option>
-      <option value="0">Suggestions for every video</option>
-    </select>
-    <button class="btn" type="submit" {{ 'disabled' if audit.status == 'running' }}>Run again</button>
-  </form>
-</div>
 {% if notice %}<div class="notice ok">{{ notice }}</div>{% endif %}
 {% if problem %}<div class="notice bad">{{ problem }}</div>{% endif %}
 
 {% if audit.status == 'running' %}
 <section class="card" data-analysis-poll="{{ audit.id }}">
   <p><span class="chip accent spin"><span class="i"></span>Analysing</span> Syncing {{ channel.name }} and reading its analytics from YouTube. This page updates by itself; it usually takes under a minute.</p>
+  <div class="skeleton-lines" aria-hidden="true"><div class="skeleton"></div><div class="skeleton"></div><div class="skeleton"></div></div>
 </section>
 {% elif audit.status == 'failed' %}
-<section class="card"><div class="notice bad">{{ audit.error }}</div><p class="secondary">Nothing was changed on YouTube.</p></section>
+<section class="card"><div class="notice bad">{{ audit.error }}</div><p class="muted">Nothing was changed on YouTube.</p></section>
 {% else %}
 {% set n = r.numbers %}
-<div class="tiles">
-  <div class="tile"><div class="label">Channel health (rules)</div><div class="value">{{ audit.score ~ '/100' if audit.score is not none else '—' }}</div><div class="delta">{{ 'not enough data yet' if audit.score is none else 'from the checks below' }}</div></div>
-  <div class="tile"><div class="label">Views</div><div class="value">{{ n.views | compact }}</div><div class="delta">last {{ r.period }} days</div></div>
-  <div class="tile"><div class="label">Average % viewed</div><div class="value">{{ ('%.0f%%' % n.avg_view_pct) if n.avg_view_pct is not none else '—' }}</div><div class="delta">{{ r.rated_videos }} videos with enough views</div></div>
-  <div class="tile"><div class="label">From YouTube's recommendations</div><div class="value">{{ '%.0f%%' % n.recommended_pct }}</div><div class="delta">Browse, Suggested, Shorts feed</div></div>
-  <div class="tile"><div class="label">From search</div><div class="value">{{ '%.0f%%' % n.search_pct }}</div><div class="delta">YouTube search</div></div>
-  <div class="tile"><div class="label">Likes per 1,000 views</div><div class="value">{{ n.likes_per_1000 }}</div><div class="delta">videos with enough views</div></div>
+<ol class="how-steps" aria-label="How this works">
+  <li class="glass"><span class="step-n">1</span><div><strong>See what's holding the channel back</strong><span class="muted small">fixed checks on YouTube's numbers</span></div></li>
+  <li class="glass"><span class="step-n">2</span><div><strong>Open a video below</strong><span class="muted small">pick a title, check the rest</span></div></li>
+  <li class="glass"><span class="step-n">3</span><div><strong>Apply to YouTube</strong><span class="muted small">only after you approve · Roll back any time</span></div></li>
+</ol>
+{% if audit.language %}
+<div class="notice {{ '' if audit.language == 'hi' else 'warn' }} lang-note">
+  {% if audit.language == 'hi' %}Suggestions are written for a Hindi audience: Devanagari titles, Roman tags and hashtags.
+  {% else %}Suggestions are written in <strong>{{ language_name(audit.language) }}</strong>, this channel's upload language. If the channel speaks Hindi or Hinglish, set <em>Language: Hindi</em> in <a href="/channels/{{ channel.id }}/setup#defaults" target="setup-{{ channel.id }}" data-setup-window>Set up channel → Upload defaults</a>, then Run again.{% endif %}
 </div>
+{% endif %}
 
+{% set problems = r.findings | rejectattr('severity', 'equalto', 'info') | list %}
+<section class="card" style="margin-bottom:var(--s5)">
+  <div>
+    <h2>Channel health</h2>
+    <p class="card-sub" style="margin-top:4px">From fixed checks on YouTube's numbers; no AI.</p>
+    <div class="score">
+      {{ ring(audit.score, 'Channel score') }}
+      <div style="flex:1;min-width:200px">
+        <p class="headline">{{ problems[0].title if problems else 'No problems found by the checks.' }}</p>
+        <p class="muted">{{ problems | length }} problem{{ '' if problems | length == 1 else 's' }} found{% if audit.score is none %}; not enough data yet for a score{% endif %}.</p>
+      </div>
+    </div>
+  </div>
+</section>
+<section class="tiles" aria-label="Key numbers">
+    {% call stat('Views', n.views | compact, 'views') %}<span class="delta">last {{ r.period }} days</span>{% endcall %}
+    {% call stat('Average % viewed', ('%.0f%%' % n.avg_view_pct) if n.avg_view_pct is not none else '—', 'clock', 'How much of each video people watch. Over 100% means Shorts are replayed.') %}<span class="delta">{{ r.rated_videos }} videos with enough views</span>{% endcall %}
+    {% call stat('From recommendations', '%.0f%%' % n.recommended_pct, 'sparkle', 'Views from Browse, Suggested videos and the Shorts feed: YouTube showing your videos to people.') %}<span class="delta {{ 'warn' if n.recommended_pct < 25 else 'up' }}">Browse, Suggested, Shorts</span>{% endcall %}
+    {% call stat('From search', '%.0f%%' % n.search_pct, 'search', 'Views from YouTube search. Titles, descriptions and tags decide this.') %}<span class="delta {{ 'warn' if n.search_pct < 5 else 'up' }}">{{ 'Titles can help here' if n.search_pct < 5 else 'Healthy' }}</span>{% endcall %}
+</section>
+
+{% macro finding_row(f) -%}
+<div class="finding sev-{{ f.severity }}">
+  <div class="finding-head"><span class="chip {{ {'high': 'critical', 'medium': 'warning', 'low': '', 'info': 'accent'}[f.severity] }}"><span class="i">{{ {'high': '!', 'medium': '!', 'low': '·', 'info': 'i'}[f.severity] }}</span>{{ {'high': 'High', 'medium': 'Medium', 'low': 'Low', 'info': 'Note'}[f.severity] }}</span><strong>{{ f.title }}</strong></div>
+  <p class="secondary">{{ f.detail }}</p>
+  {% if f.numbers %}<details class="nums"><summary class="muted small">The numbers</summary><div class="num-chips">{% for k, v in f.numbers.items() %}<span class="num-tag">{{ k }}: {{ v }}</span>{% endfor %}</div></details>{% endif %}
+</div>
+{%- endmacro %}
+{% set problems = r.findings | rejectattr('severity', 'equalto', 'info') | list %}
+{% set notes = r.findings | selectattr('severity', 'equalto', 'info') | list %}
 <div class="grid cols-3">
   <section class="card span-2">
-    <div class="card-head"><h2>What the checks found</h2><span class="muted">rule-based, no AI</span></div>
+    <div class="card-head"><h2>What's holding the channel back</h2><span class="muted">{{ problems | length }} problems · rule-based, no AI</span></div>
     <div class="findings">
-    {% for f in r.findings %}
-      <div class="finding sev-{{ f.severity }}">
-        <div class="finding-head"><span class="chip {{ {'high': 'critical', 'medium': 'warning', 'low': '', 'info': 'accent'}[f.severity] }}"><span class="i">{{ {'high': '!', 'medium': '!', 'low': '·', 'info': 'i'}[f.severity] }}</span>{{ {'high': 'High', 'medium': 'Medium', 'low': 'Low', 'info': 'Note'}[f.severity] }}</span><strong>{{ f.title }}</strong></div>
-        <p class="secondary">{{ f.detail }}</p>
-        {% if f.numbers %}<div class="num-chips">{% for k, v in f.numbers.items() %}<span class="num-tag">{{ k }}: {{ v }}</span>{% endfor %}</div>{% endif %}
-      </div>
-    {% endfor %}
+      {% for f in problems %}{{ finding_row(f) }}{% else %}<p class="secondary">The checks found no problems.</p>{% endfor %}
     </div>
+    {% if notes %}
+    <details class="more"><summary>{{ notes | length }} more notes: what's going well, and where there isn't enough data yet</summary>
+      <div class="findings">{% for f in notes %}{{ finding_row(f) }}{% endfor %}</div>
+    </details>
+    {% endif %}
   </section>
   <section class="card">
     <div class="card-head"><h2>Where views come from</h2><span class="muted">last {{ r.period }} days</span></div>
@@ -61,14 +91,56 @@
       {% endfor %}
     </div>
     {% else %}<div class="empty">No views in this period.</div>{% endif %}
-    <h3 style="margin-top:16px">Impressions and click-through rate</h3>
+    <details class="more"><summary>Impressions and click-through rate</summary>
     {% if r.reach %}
       <p>{{ r.reach.impressions | compact }} impressions · {{ r.reach.ctr_pct }}% click-through rate</p>
     {% else %}
       <p class="muted small">Not available yet. YouTube's Analytics API doesn't serve impressions or CTR; they come from the YouTube Reporting API, which needs a reporting job set up once per channel and sends its first data about 48 hours later. Until then, use the Reach tab in YouTube Studio.</p>
     {% endif %}
+    </details>
   </section>
 </div>
+
+<section class="card section" id="videos">
+  <div class="card-head"><h2>Videos to improve</h2><span class="muted">weakest first{% if audit.writing %} · Gemini is writing {{ audit.writing }} more{% endif %}</span></div>
+  {% if r.gemini_note %}<div class="notice">{{ r.gemini_note }}</div>{% endif %}
+  {% if audit.suggestions %}
+  <div class="seg video-filter" role="group" aria-label="Show videos" data-video-filter>
+    <button type="button" class="on" data-filter="all">All {{ audit.suggestions | length }}</button>
+    {% if audit.counts.review %}<button type="button" data-filter="review">To review {{ audit.counts.review }}</button>{% endif %}
+    {% if audit.counts.live %}<button type="button" data-filter="live">Live on YouTube {{ audit.counts.live }}</button>{% endif %}
+    {% if audit.counts.thin %}<button type="button" data-filter="thin">Not enough data {{ audit.counts.thin }}</button>{% endif %}
+    {% if audit.counts.failed %}<button type="button" data-filter="failed">Failed {{ audit.counts.failed }}</button>{% endif %}
+  </div>
+  <p class="muted small">Tap a video to open it. Nothing changes on YouTube until you approve it.</p>
+  <div class="video-rows">
+  {% for s in audit.suggestions %}
+    {% set st = s.stats %}
+    <details class="video-row state-{{ s.state }}" id="s-{{ s.id }}" data-state="{{ s.state }}">
+      <summary>
+        <span class="row-state" title="{{ {'live': 'Live on YouTube', 'review': 'To review', 'thin': 'Not enough data yet', 'generating': 'Gemini is writing', 'failed': 'Failed'}[s.state] }}">{{ {'live': '✓', 'review': '★', 'thin': '…', 'generating': '◌', 'failed': '✕'}[s.state] }}</span>
+        <span class="row-main">
+          <span class="row-title">{{ s.current.title if s.current is defined else s.video_title }}</span>
+          <span class="row-sub">
+            {% if s.state == 'live' %}<span class="row-tag good">Live on YouTube</span>{% elif s.state == 'thin' %}<span class="row-tag">Not enough data yet</span>{% elif s.state == 'failed' %}<span class="row-tag bad">Failed</span>{% elif s.state == 'generating' %}<span class="row-tag">Gemini is writing</span>{% else %}<span class="row-tag accent">To review</span>{% endif %}
+            {% if st.views is defined %}{{ st.views }} views{% endif %}{% if st.avg_view_pct %} · {{ '%.0f' % st.avg_view_pct }}% viewed{% endif %}
+            {% if s.package and s.package.reasons %} · {{ s.package.reasons[0].reason }}{% endif %}
+          </span>
+        </span>
+        {% if s.package and s.package.health_score is not none %}<span class="score-pill" title="Gemini's score for this video, 0-100">{{ s.package.health_score }}</span>{% endif %}
+        <span class="row-caret" aria-hidden="true">▾</span>
+      </summary>
+      <div class="row-body">
+        {% if s.youtube_video_id %}<a class="btn small studio-link" href="https://studio.youtube.com/video/{{ s.youtube_video_id }}/edit" target="_blank" rel="noopener">Open in Studio ↗</a>{% endif %}
+        {{ panel(s, '/suggestions/' ~ s.id ~ '/regenerate', bare=true) }}
+      </div>
+    </details>
+  {% endfor %}
+  </div>
+  {% else %}
+  <div class="empty">{{ 'No suggestions: add a Gemini key in Settings and run again.' if r.gemini_note else 'No public videos to suggest for yet.' }}</div>
+  {% endif %}
+</section>
 
 {% if diff %}
 <section class="card section" id="compare">
@@ -81,23 +153,6 @@
 <section class="card section" id="results">
   <div class="card-head"><h2>Did the changes help?</h2><span class="muted">each changed video's views, 7 days before and after</span></div>
   {{ change_results(r.change_results or []) }}
-</section>
-
-<section class="card section" id="videos">
-  <div class="card-head"><h2>Suggestions per video</h2><span class="muted">{{ audit.suggestions | length }} videos{% if audit.writing %} · Gemini is writing {{ audit.writing }} more{% endif %}</span></div>
-  {% if r.gemini_note %}<div class="notice">{{ r.gemini_note }}</div>{% endif %}
-  <p class="muted small">Weakest videos first (fewest views per day since publishing). One Gemini request per video, sent only the numbers above. Nothing changes on YouTube until you approve a change.</p>
-  {% for s in audit.suggestions %}
-  <article class="video-card">
-    <div class="video-card-head">
-      <strong>{{ s.video_title }}</strong>
-      {% if s.youtube_video_id %}<a class="btn small" href="https://studio.youtube.com/video/{{ s.youtube_video_id }}/edit" target="_blank" rel="noopener">Open in Studio</a>{% endif %}
-    </div>
-    {{ panel(s, '/suggestions/' ~ s.id ~ '/regenerate') }}
-  </article>
-  {% else %}
-  <div class="empty">{{ 'No suggestions: add a Gemini key in Settings and run again.' if r.gemini_note else 'No public videos to suggest for yet.' }}</div>
-  {% endfor %}
 </section>
 {% endif %}
 

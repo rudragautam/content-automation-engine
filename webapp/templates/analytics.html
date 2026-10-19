@@ -1,20 +1,18 @@
 {% extends "base.html" %}
+{% from "_ui.html" import icon, stat, empty_state %}
 {% from "_macros.html" import delta_short, delta, range_filter, scope_filter %}
 {% block title %}Analytics{% endblock %}
+{% block page_title %}Analytics{% endblock %}
+{% block page_desc %}{% if scope.active %}{{ scope.label }} · {{ channels | length }} channel{{ '' if channels | length == 1 else 's' }}{% else %}Every channel together{% endif %} · last {{ days }} days{% endblock %}
 {% block content %}
-<div class="page-head">
-  <div>
-    <h1>Analytics</h1>
-    <div class="sub">{% if scope.active %}<span class="scope-tag">{{ scope.label }}</span> · {{ channels | length }} channel{{ '' if channels | length == 1 else 's' }}{% else %}Every channel under one umbrella{% endif %} · last {{ days }} days</div>
-  </div>
-  <div class="filters">{{ scope_filter(scope, {'days': days}) }}{{ range_filter(days, ranges, "/analytics?") }}</div>
-</div>
+<div class="filters" style="margin-bottom:var(--s5)">{{ scope_filter(scope, {'days': days}) }}{{ range_filter(days, ranges, "/analytics?") }}</div>
 
-<div class="tiles">
-  <div class="tile"><div class="label">Views</div><div class="value">{{ kpis.views | compact }}</div>{{ delta(kpis.views_delta, days) }}</div>
-  <div class="tile"><div class="label">Watch hours</div><div class="value">{{ kpis.watch_hours | compact }}</div>{{ delta(kpis.watch_delta, days) }}</div>
-  <div class="tile"><div class="label">Net subscribers</div><div class="value">{{ kpis.net_subs | signed }}</div>{{ delta(kpis.subs_delta, days) }}</div>
-  <div class="tile"><div class="label">Videos published</div><div class="value">{{ kpis.published | compact }}</div><div class="delta">avg {{ ((kpis.views / kpis.published) if kpis.published else 0) | compact }} views each</div></div>
+<section class="tiles" aria-label="Last {{ days }} days">
+  {% call stat('Views', kpis.views | compact, 'views') %}{{ delta(kpis.views_delta, days) }}{% endcall %}
+  {% call stat('Watch hours', kpis.watch_hours | compact, 'clock') %}{{ delta(kpis.watch_delta, days) }}{% endcall %}
+  {% call stat('Net subscribers', kpis.net_subs | signed, 'users') %}{{ delta(kpis.subs_delta, days) }}{% endcall %}
+  {% call stat('Videos published', kpis.published | compact, 'upload') %}<span class="delta">avg {{ ((kpis.views / kpis.published) if kpis.published else 0) | compact }} views each</span>{% endcall %}
+</section>
 </div>
 
 <div class="grid cols-3">

@@ -250,6 +250,13 @@ def load(conn, audit_id: int) -> Dict[str, Any]:
     out["suggestions"] = [optimizer.view(conn, s) for s in conn.execute(
         "SELECT * FROM video_suggestions WHERE audit_id = ? ORDER BY id", (audit_id,))]
     out["writing"] = sum(1 for s in out["suggestions"] if s["status"] == "generating")
+    stats = {v["youtube_id"]: v for v in (out["report"] or {}).get("videos", [])}
+    for s in out["suggestions"]:
+        s["stats"] = stats.get(s.get("youtube_video_id"), {})
+        s["state"] = ("live" if s["status"] == "applied" else s["status"] if s["status"] in ("generating", "failed")
+                      else "thin" if (s.get("package") or {}).get("too_little_data") else "review")
+    out["counts"] = {k: sum(1 for s in out["suggestions"] if s["state"] == k) for k in ("review", "live", "thin", "generating", "failed")}
+    out["language"] = out["suggestions"][0]["language"] if out["suggestions"] else None
     return out
 
 

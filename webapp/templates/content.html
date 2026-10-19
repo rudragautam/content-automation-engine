@@ -1,29 +1,27 @@
 {% extends "base.html" %}
 {% from "_macros.html" import queue_row, pager %}
+{% from "_ui.html" import icon, empty_state %}
 {% block title %}Content{% endblock %}
+{% block page_title %}Drafts and content{% endblock %}
+{% block page_desc %}Write videos with Gemini or fill a sheet, review them, then queue them for a channel.{% endblock %}
+{% block page_actions %}<a class="btn primary" href="#generate">{{ icon('sparkle') }}Write with Gemini</a>{% endblock %}
 {% block content %}
-<div class="page-head">
-  <div>
-    <h1>Content</h1>
-    <div class="sub">Download a niche's Excel template, fill it yourself or with an AI tool, and upload it to queue the videos.</div>
-  </div>
-</div>
 
-<nav class="pill-list" aria-label="Niches" style="margin-bottom:16px">
+<nav class="pill-list" aria-label="Niches" style="margin-bottom:var(--s5)">
   {% for n in niches %}<a class="pill {{ 'on' if n.id == niche }}" href="/content?niche={{ n.id }}">{{ n.name }}{% if n.pending %}<span class="count">{{ n.pending }}</span>{% endif %}</a>{% endfor %}
 </nav>
 
 <div class="grid cols-2">
   <section class="card">
-    <h2>1. Download the template</h2>
-    <dl class="kv" style="margin-bottom:12px">
+    <div class="card-head"><h2><span class="step-n" aria-hidden="true">1</span> Download the template</h2></div>
+    <dl class="kv" style="margin-bottom:var(--s4)">
       <dt>Template</dt><dd>{{ spec.template_id }} ({{ spec.aspect_ratio }})</dd>
       <dt>Each video</dt><dd>an intro slide and {{ items_text }}</dd>
       <dt>Language</dt><dd>{{ spec.language }}</dd>
       <dt>Video render</dt><dd>{% if can_render %}<span class="chip good"><span class="i">✓</span>Available</span>{% else %}<span class="chip warning"><span class="i">–</span>Not built yet</span> <span class="muted">content can be queued now</span>{% endif %}</dd>
     </dl>
     <a class="btn primary" href="/content/{{ niche }}/template.xlsx">Download {{ spec.name }} template</a>
-    <ol class="steps" style="margin-top:14px">
+    <ol class="steps" style="margin-top:var(--s4)">
       <li>Open the <strong>AI Prompt</strong> sheet, copy it, and fill in the number of videos and the topic.</li>
       <li>Give the prompt and the file to Gemini or any other AI tool.</li>
       <li>Put its rows in the <strong>Content</strong> sheet (paste a table at cell A1).</li>
@@ -32,7 +30,7 @@
   </section>
 
   <section class="card">
-    <h2>2. Upload the filled sheet</h2>
+    <div class="card-head"><h2><span class="step-n" aria-hidden="true">2</span> Upload the filled sheet</h2></div>
     {% if channels %}
     <form method="post" action="/content/{{ niche }}/upload" enctype="multipart/form-data" class="form-row">
       <label class="field">Channel
@@ -45,15 +43,15 @@
       </label>
       <button class="btn primary" type="submit">Upload and check</button>
     </form>
-    <p class="muted" style="margin-top:10px;font-size:12.5px">Nothing is added unless every row passes. Rows without a publish time fill the channel's next free slots.</p>
-    {% else %}<div class="empty">No channel uses this niche yet.</div>{% endif %}
+    <p class="muted small" style="margin-top:var(--s3)">Nothing is added unless every row passes. Rows without a publish time fill the channel's next free slots.</p>
+    {% else %}{{ empty_state("No channel uses this niche yet", "Add a channel for it in Settings.", "/settings#channels", "Open Settings", "channels") }}{% endif %}
 
-    {% if upload_error %}<div class="notice bad" style="margin-top:12px">{{ upload_error }}</div>{% endif %}
+    {% if upload_error %}<div class="notice bad" style="margin-top:var(--s3)">{{ upload_error }}</div>{% endif %}
     {% if result %}
       {% if result.ok %}
-      <div class="notice ok" style="margin-top:12px"><strong>{{ result.videos }} video{{ '' if result.videos == 1 else 's' }} queued</strong> from {{ result.filename }}.</div>
+      <div class="notice ok" style="margin-top:var(--s3)"><strong>{{ result.videos }} video{{ '' if result.videos == 1 else 's' }} queued</strong> from {{ result.filename }}.</div>
       {% else %}
-      <div class="notice bad" style="margin-top:12px"><strong>{{ result.errors | length }} problem{{ '' if result.errors | length == 1 else 's' }} in {{ result.filename }}.</strong> Nothing was added; fix these and upload again.</div>
+      <div class="notice bad" style="margin-top:var(--s3)"><strong>{{ result.errors | length }} problem{{ '' if result.errors | length == 1 else 's' }} in {{ result.filename }}.</strong> Nothing was added; fix these and upload again.</div>
       <div class="table-wrap" style="max-height:320px;overflow-y:auto"><table>
         <thead><tr><th class="r">Row</th><th>Column</th><th>Problem</th></tr></thead>
         <tbody>{% for e in result.errors %}<tr><td class="r num">{{ e.row or '—' }}</td><td><code>{{ e.column or '—' }}</code></td><td>{{ e.message }}</td></tr>{% endfor %}</tbody>
@@ -64,12 +62,12 @@
 </div>
 
 <section class="card section" id="generate">
-  <div class="card-head"><h2>Or generate with Gemini</h2>{% if gemini.configured %}<span class="muted">model {{ gemini.model }}</span>{% endif %}</div>
+  <div class="card-head"><h2>Write videos with Gemini</h2>{% if gemini.configured %}<span class="muted">model {{ gemini.model }}</span>{% endif %}</div>
   {% if gen_problem %}<div class="notice bad">{{ gen_problem }}</div>{% endif %}
   {% if not gemini.configured %}
-    <p class="secondary">Add your Gemini API key in <a href="/settings#gemini">Settings</a> and the hub writes {{ spec.name }} videos for you, checked against the same rules as the Excel template.</p>
+    <p class="muted">Add your Gemini API key in <a href="/settings#gemini">Settings</a> and the hub writes {{ spec.name }} videos for you, checked against the same rules as the Excel template.</p>
   {% elif not channels %}
-    <div class="empty">No channel uses this niche yet.</div>
+    {{ empty_state("No channel uses this niche yet", "Add a channel for it in Settings.", "/settings#channels", "Open Settings", "channels") }}
   {% else %}
   <form method="post" action="/content/{{ niche }}/generate" class="form-row">
     <label class="field" style="flex:2;min-width:240px">Topic or theme
@@ -84,12 +82,13 @@
     <label class="field" style="flex:2;min-width:240px">Extra instructions (optional)
       <input type="text" name="instructions" maxlength="1000" placeholder="e.g. use examples from Indian students' lives">
     </label>
-    <button class="btn primary" type="submit">Generate</button>
+    <button class="btn primary" type="submit">{{ icon('sparkle') }}Generate</button>
   </form>
-  <p class="muted" style="margin-top:10px;font-size:12.5px">Takes about 20–60 seconds. You review the result before anything is queued, and recent titles from this niche are passed along so topics don't repeat. Check facts before publishing; AI can still get things wrong.</p>
+  <p class="muted small" style="margin-top:var(--s3)">Takes about 20–60 seconds. You review the result before anything is queued, and recent titles from this niche are passed along so topics don't repeat. Check facts before publishing; AI can still get things wrong.</p>
   {% endif %}
   {% if drafts %}
-  <div class="table-wrap" style="margin-top:12px"><table>
+  <h3 style="margin:var(--s5) 0 var(--s3)">Your drafts</h3>
+  <div class="table-wrap"><table>
     <thead><tr><th>Draft</th><th>Channel</th><th class="r">Videos</th><th>Status</th><th>Created</th></tr></thead>
     <tbody>{% for d in drafts %}
       <tr><td><a href="/drafts/{{ d.id }}" class="cell-title">{{ d.topic }}</a></td><td>{{ d.channel_name }}</td><td class="r num">{{ d.count }}</td>
@@ -109,7 +108,7 @@
     <tbody>{% for v in ready %}{{ queue_row(v, true, can_render) }}{% endfor %}</tbody>
   </table></div>
   {{ pager(ready, "videos") }}
-  {% else %}<div class="empty">Nothing waiting. Uploaded rows appear here until they're scheduled on YouTube.</div>{% endif %}
+  {% else %}{{ empty_state('Nothing waiting', 'Uploaded or written videos wait here until they are scheduled on YouTube.', none, none, 'drafts') }}{% endif %}
 </section>
 
 <section class="card section" id="history">
@@ -120,6 +119,6 @@
     <tbody>{% for u in uploads %}<tr><td>{{ u.filename }}</td><td>{{ u.channel_name or '—' }}</td><td class="r num">{{ u.videos_added }}</td><td class="num">{{ u.uploaded_at | when }}</td></tr>{% endfor %}</tbody>
   </table></div>
   {{ pager(uploads, "uploads") }}
-  {% else %}<div class="empty">No uploads for this niche yet.</div>{% endif %}
+  {% else %}{{ empty_state('No uploads for this niche yet', '', none, none, 'upload') }}{% endif %}
 </section>
 {% endblock %}

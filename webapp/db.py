@@ -162,7 +162,8 @@ CREATE TABLE IF NOT EXISTS settings (
 # Columns added after the first release; init() adds any that an older database lacks.
 MIGRATIONS = {
     "videos": [("youtube_video_id", "TEXT"), ("upload_progress", "REAL")],
-    "channels": [("last_synced_at", "TEXT"), ("setup_json", "TEXT"), ("angle", "TEXT"), ("google_account", "TEXT")],
+    "channels": [("last_synced_at", "TEXT"), ("setup_json", "TEXT"), ("angle", "TEXT"), ("google_account", "TEXT"),
+                 ("theme", "TEXT")],  # colour palette (webapp.themes); NULL = Ember
     # audit_id: the channel analysis that asked for it; context_json: the video's live metadata and
     # findings at analysis time; change_group: its latest change on YouTube (metadata_changes).
     "video_suggestions": [("audit_id", "INTEGER"), ("context_json", "TEXT"), ("change_group", "TEXT")],

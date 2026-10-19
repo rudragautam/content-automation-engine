@@ -1,18 +1,17 @@
-{# The AI Optimizer's Suggestions panel for one video: ask, wait, review before/after, approve, undo or roll back.
-   A suggestion from the channel analysis (s.remote) changes the video on YouTube; any other changes the hub only. #}
-{% macro panel(s, suggest_url, row=none) -%}
-<div class="suggest" {% if s %}id="s-{{ s.id }}"{% endif %} {% if s and s.status == 'generating' %}data-suggest-poll="{{ s.id }}"{% endif %}>
+{# The AI Optimizer's Suggestions panel for one video, in three steps: pick a title, check the
+   description and tags, approve and apply. A suggestion from the channel analysis (s.remote)
+   changes the video on YouTube; any other changes the hub only. `bare` drops the heading when
+   the panel sits inside a video row that already has one. #}
+{% macro panel(s, suggest_url, row=none, bare=false) -%}
+<div class="suggest{{ ' bare' if bare }}" {% if s and not bare %}id="s-{{ s.id }}"{% endif %} {% if s and s.status == 'generating' %}data-suggest-poll="{{ s.id }}"{% endif %}>
+  {% if not bare %}
   <div class="suggest-head">
     <h3>Suggestions</h3>
     {% if s and s.status == 'generating' %}<span class="chip accent spin"><span class="i"></span>Gemini is writing</span>
-    {% elif s and s.status == 'applied' %}<span class="chip good"><span class="i">✓</span>{{ 'Live on YouTube since' if s.remote else 'Applied' }} {{ s.applied_at | when }}</span>
+    {% elif s and s.status == 'applied' %}<span class="chip good"><span class="i">✓</span>{{ 'Live on YouTube' if s.remote else 'Applied' }}</span>
     {% elif s and s.status == 'ready' %}<span class="chip accent"><span class="i">★</span>Ready to review</span>
     {% elif s and s.status == 'failed' %}<span class="chip critical"><span class="i">✕</span>Failed</span>{% endif %}
-    {% if s and s.package and s.package.health_score is not none %}<span class="score-pill" title="Gemini's score for this video, 0-100">{{ s.package.health_score }}/100</span>{% endif %}
   </div>
-
-  {% if s and s.remote and s.findings %}
-  <ul class="findings-mini">{% for f in s.findings %}<li>{{ f }}</li>{% endfor %}</ul>
   {% endif %}
 
   {% if s and s.blocked %}
@@ -25,112 +24,129 @@
       <button class="btn primary" type="submit">{{ 'Try again' if s else 'Suggest with Gemini' }}</button>
     </form>
   {% elif s.status == 'generating' %}
-    <p class="secondary">One Gemini request for this video. This updates by itself, usually within 10–30 seconds.</p>
+    <p class="secondary"><span class="chip accent spin"><span class="i"></span>Gemini is writing</span> One request for this video; this updates by itself in 10–30 seconds.</p>
+    <div class="skeleton-lines" aria-hidden="true"><div class="skeleton"></div><div class="skeleton"></div><div class="skeleton"></div></div>
   {% else %}
     {% set p = s.package %}
     {% set pv = s.preview %}
-    <p class="muted suggest-meta">Written in {{ 'Hindi: Devanagari titles, Roman tags' if s.language == 'hi' else language_name(s.language) }}{{ ' · Made for Kids rules (no comment or bell CTAs)' if s.made_for_kids }}{{ ' · Short' if s.is_short }} · {{ s.model }}</p>
-    {% if s.warnings %}<div class="notice">{% for w in s.warnings %}<div>{{ w }}</div>{% endfor %}</div>{% endif %}
+    {% set f = s.form %}
 
-    {% if p.summary is defined %}
-    <div class="analysis-box">
-      <p>{{ p.summary }}</p>
-      {% if p.too_little_data %}<p class="muted small">Not enough data yet to say why this video gets few views; the suggestions below only improve how it can be found.</p>
-      {% elif p.reasons %}
-      <h4>Reasons for low reach</h4>
-      <ul>{% for r in p.reasons %}<li>{{ r.reason }} <span class="num-tag">{{ r.number }}</span></li>{% endfor %}</ul>
-      {% endif %}
-      {% if p.actions %}
-      <h4>What to do, most impact first</h4>
-      <ol>{% for a in p.actions %}<li>{{ a }}</li>{% endfor %}</ol>
-      {% endif %}
-      {% if p.ideas %}
-      <h4>Follow-up video ideas</h4>
-      <ul>{% for i in p.ideas %}<li><strong>{{ i.title }}</strong>{% if i.why %} <span class="muted">· {{ i.why }}</span>{% endif %}</li>{% endfor %}</ul>
-      {% endif %}
+    {% if s.status == 'applied' %}
+    <div class="live-box">
+      <div><strong>✓ {{ 'Live on YouTube' if s.remote else 'Applied in the hub' }}</strong> <span class="muted small">since {{ s.applied_at | when }}</span></div>
+      <div class="live-title">{{ s.current.title }}</div>
+      {% if s.before %}<div class="muted small">Before: {{ s.before.title }}</div>{% endif %}
+      <form method="post" action="/suggestions/{{ s.id }}/undo" data-confirm="{{ 'The previous title, description and tags go back on YouTube: ' ~ s.before.title if s.remote and s.before else 'The title, description and tags from before Apply come back.' }}" data-confirm-title="{{ 'Roll back on YouTube?' if s.remote else 'Undo this change?' }}" data-confirm-ok="{{ 'Roll back' if s.remote else 'Undo' }}">
+        <button class="btn small" type="submit">↺ {{ 'Roll back on YouTube' if s.remote else 'Undo: restore the previous version' }}</button>
+      </form>
     </div>
     {% endif %}
 
-    {% if p.why %}
-    <div class="suggest-why"><strong>Why these words</strong><ul>{% for w in p.why %}<li>{{ w }}</li>{% endfor %}</ul></div>
+    {% if p.summary is defined %}
+    <div class="why-box">
+      <p class="why-summary">{{ p.summary }}</p>
+      {% if p.too_little_data %}<p class="muted small">This video has too few views to say why it's slow; the suggestions only help people find it.</p>
+      {% elif p.reasons %}<ul class="why-list">{% for r in p.reasons %}<li>{{ r.reason }} <span class="num-tag">{{ r.number }}</span></li>{% endfor %}</ul>{% endif %}
+    </div>
     {% endif %}
 
-    <form method="post" action="/suggestions/{{ s.id }}/apply" class="suggest-form" data-suggest-form
+    {% if s.status == 'applied' %}<details class="edit-again"><summary>Change it again</summary>{% endif %}
+    <form method="post" action="/suggestions/{{ s.id }}/apply" class="suggest-form" data-suggest-form {% if s.remote %}data-remote{% endif %} data-before-title="{{ pv.before.title }}"
           data-footer="{{ pv.footer }}" data-default-tags="{{ pv.default_tags | join(', ') }}">
-      <fieldset class="title-options">
-        <legend>Pick a title</legend>
-        {% for t in p.titles %}
-        <button type="button" class="title-option{{ ' on' if loop.first }}" data-title-option="{{ t }}">{{ t }}</button>
-        {% endfor %}
-      </fieldset>
-      <label class="field">Title <span class="count" data-count="title"></span>
-        <input type="text" name="title" value="{{ p.titles[0] }}" maxlength="200" required>
-      </label>
-      <label class="field">Description <span class="count" data-count="description"></span>
-        <textarea name="description" rows="7" maxlength="20000">{{ p.description }}</textarea>
-      </label>
-      {% if pv.footer %}<p class="muted small">The channel's footer is added at upload and counts toward the limit: <em>{{ pv.footer }}</em></p>{% endif %}
-      <label class="field">Tags, comma separated <span class="count" data-count="tags"></span>
-        <textarea name="tags" rows="3" maxlength="5000">{{ p.tags | join(', ') }}</textarea>
-      </label>
-      {% if pv.default_tags %}<p class="muted small">Default tags added at upload: {{ pv.default_tags | join(', ') }}</p>{% endif %}
-
-      <div class="before-after">
-        <div>
-          <h4>{{ 'Live on YouTube now' if s.remote else 'Before' }}</h4>
-          <div class="ba-title">{{ pv.before.title or '—' }}</div>
-          <pre class="ba-text">{{ pv.before.description or '(no description)' }}</pre>
-          <div class="ba-tags">{{ pv.before.tags | join(', ') or '(no tags)' }}</div>
-          <div class="muted small">{{ pv.before_size.title }}/100 characters · {{ pv.before_size.description_bytes }}/5000 bytes · tags {{ pv.before_size.tags }}/500</div>
+      <div class="step">
+        <div class="step-head"><span class="step-n">1</span><strong>Pick a title</strong></div>
+        <div class="title-options" role="group" aria-label="Title options">
+          {% for t in p.titles %}
+          <button type="button" class="title-option{{ ' on' if t == f.title }}" data-title-option="{{ t }}"><span class="dot"></span><span>{{ t }}</span></button>
+          {% endfor %}
         </div>
-        <div>
-          <h4>After</h4>
-          <div class="ba-title" data-after="title">{{ pv.after.title }}</div>
-          <pre class="ba-text" data-after="description">{{ pv.after.description }}</pre>
-          <div class="ba-tags" data-after="tags">{{ pv.after.tags | join(', ') }}</div>
-        </div>
+        <label class="field">Or edit it <span class="count" data-count="title"></span>
+          <input type="text" name="title" value="{{ f.title }}" maxlength="200" required>
+        </label>
+        <div class="title-compare muted small">{{ 'Now on YouTube' if s.remote else 'Now' }}: {{ pv.before.title or '—' }}</div>
       </div>
+
+      <div class="step">
+        <div class="step-head"><span class="step-n">2</span><strong>Description and tags</strong></div>
+        <p class="muted small">Description {{ s.current.description | length }} → {{ f.description | length }} characters · tags {{ s.current.tags | length }} → {{ f.tags | length }}. Ready as written; open it to check or edit.</p>
+        <details class="more">
+          <summary>Check or edit the description and tags</summary>
+          <label class="field">Description <span class="count" data-count="description"></span>
+            <textarea name="description" rows="7" maxlength="20000">{{ f.description }}</textarea>
+          </label>
+          {% if pv.footer %}<p class="muted small">The channel's footer is added at upload and counts toward the limit: <em>{{ pv.footer }}</em></p>{% endif %}
+          <label class="field">Tags, comma separated <span class="count" data-count="tags"></span>
+            <textarea name="tags" rows="3" maxlength="5000">{{ f.tags | join(', ') }}</textarea>
+          </label>
+          {% if pv.default_tags %}<p class="muted small">Default tags added at upload: {{ pv.default_tags | join(', ') }}</p>{% endif %}
+          <div class="before-after">
+            <div>
+              <h4>{{ 'Live on YouTube now' if s.remote else 'Before' }}</h4>
+              <div class="ba-title">{{ pv.before.title or '—' }}</div>
+              <pre class="ba-text">{{ pv.before.description or '(no description)' }}</pre>
+              <div class="ba-tags">{{ pv.before.tags | join(', ') or '(no tags)' }}</div>
+            </div>
+            <div>
+              <h4>After</h4>
+              <div class="ba-title" data-after="title">{{ pv.after.title }}</div>
+              <pre class="ba-text" data-after="description">{{ pv.after.description }}</pre>
+              <div class="ba-tags" data-after="tags">{{ pv.after.tags | join(', ') }}</div>
+            </div>
+          </div>
+        </details>
+      </div>
+
       {% if pv.problems %}<div class="notice bad">{% for e in pv.problems %}<div>{{ e }}</div>{% endfor %}</div>{% endif %}
       <div class="notice bad" data-limit-problems hidden></div>
 
-      {% if s.remote and s.recent %}
-      <div class="notice warn">This video's metadata was {{ 'rolled back' if s.recent.action == 'rollback' else 'changed' }} on {{ s.recent.created_at | when }}, less than 7 days ago. Changing it again so soon makes it impossible to tell which change helped.
-        <label class="approve"><input type="checkbox" name="confirm_recent" value="yes"> Change it anyway</label>
-      </div>
-      {% endif %}
-      <label class="approve"><input type="checkbox" name="approve" value="yes" required> I've read the before and after and approve this change{{ ' on YouTube' if s.remote }}.</label>
-      <div class="actions" style="justify-content:flex-start">
-        <button class="btn primary" type="submit" data-apply>{% if s.remote %}Apply to YouTube{% else %}{{ 'Apply again' if s.status == 'applied' else 'Apply' }}{% endif %}</button>
-        {% if s.remote %}<span class="muted small">Changes only the title, description and tags (about 51 of the 10,000 daily quota units). Privacy and Made for Kids stay as they are.</span>{% endif %}
+      <div class="step apply-step">
+        <div class="step-head"><span class="step-n">3</span><strong>{{ 'Apply to YouTube' if s.remote else 'Apply' }}</strong></div>
+        {% if s.remote and s.recent %}
+        <div class="notice warn">Changed {{ s.recent.created_at | when }}, less than 7 days ago. Changing it again so soon makes it impossible to tell which change helped.
+          <label class="approve"><input type="checkbox" name="confirm_recent" value="yes"> Change it anyway</label>
+        </div>
+        {% endif %}
+        <label class="approve"><input type="checkbox" name="approve" value="yes" required data-approve> {{ "I've read the before and after and approve this change on YouTube." if s.remote else "I've read the before and after and approve this change." }}</label>
+        <div class="apply-row">
+          <button class="btn primary" type="submit" data-apply>{% if s.remote %}Apply to YouTube{% else %}{{ 'Apply again' if s.status == 'applied' else 'Apply' }}{% endif %}</button>
+          <span class="muted small">{% if s.remote %}Only the title, description and tags change (about 51 of 10,000 daily quota units). Privacy and Made for Kids stay as they are; the old version is backed up and Roll back restores it.{% else %}Changes the video in the hub; it goes to YouTube with the upload. Undo restores the old version.{% endif %}</span>
+        </div>
       </div>
     </form>
-    {% if s.status == 'applied' %}
-    <form method="post" action="/suggestions/{{ s.id }}/undo" onsubmit="return confirm('{{ 'Put the previous title, description and tags back on YouTube?' if s.remote else 'Put back the title, description and tags from before Apply?' }}')" class="undo-form">
-      <button class="btn" type="submit">{{ 'Roll back on YouTube' if s.remote else 'Undo: restore the previous version' }}</button>
-      {% if s.before %}<span class="muted small">Previous title: {{ s.before.title }}</span>{% endif %}
-    </form>
-    {% endif %}
+    {% if s.status == 'applied' %}</details>{% endif %}
 
-    {% if p.shorts %}
-    <div class="shorts-advice">
+    {% if (p.actions is defined and p.actions) or p.shorts or (p.ideas is defined and p.ideas) %}
+    <details class="more tips">
+      <summary>Tips for this and future videos{% if p.actions is defined and p.actions %} · {{ p.actions | length }} actions{% endif %}{% if p.ideas is defined and p.ideas %} · {{ p.ideas | length }} ideas{% endif %}{% if p.shorts %} · hook{% endif %}</summary>
+      {% if p.actions is defined and p.actions %}<h4>What to do, most impact first</h4><ol>{% for a in p.actions %}<li>{{ a }}</li>{% endfor %}</ol>{% endif %}
+      {% if p.ideas is defined and p.ideas %}<h4>Follow-up video ideas</h4><ul>{% for i in p.ideas %}<li><strong>{{ i.title }}</strong>{% if i.why %} <span class="muted">· {{ i.why }}</span>{% endif %}</li>{% endfor %}</ul>{% endif %}
+      {% if p.shorts %}
       <h4>For the video itself</h4>
-      <p class="muted small">Not applied anywhere: the hub can't change what's inside a video. Use these when you make or edit it.</p>
+      <p class="muted small">The hub can't change what's inside a video; use these when you make or edit it.</p>
       <dl class="kv">
         <dt>Hook, first 3 seconds</dt><dd>{{ p.shorts.hook }}</dd>
         {% if p.shorts.on_screen_text %}<dt>On-screen text</dt><dd>{{ p.shorts.on_screen_text }}</dd>{% endif %}
         {% if p.shorts.loop_ending %}<dt>Loop ending</dt><dd>{{ p.shorts.loop_ending }}</dd>{% endif %}
         <dt>CTA</dt><dd>{{ p.shorts.cta }}</dd>
       </dl>
-    </div>
+      {% endif %}
+      {% if p.why %}<h4>Why these words</h4><ul>{% for w in p.why %}<li>{{ w }}</li>{% endfor %}</ul>{% endif %}
+    </details>
     {% endif %}
 
-    {% if s.status != 'applied' %}
-    <form method="post" action="{{ suggest_url }}" class="regen">
-      {% if row %}<input type="hidden" name="row" value="{{ row }}">{% endif %}
-      <button class="btn small" type="submit">Ask Gemini again</button>
-      <span class="muted small">Better metadata can help the right viewers find a video; it doesn't guarantee views.</span>
-    </form>
-    {% endif %}
+    <details class="more fine-print">
+      <summary>Details</summary>
+      <p class="muted small">Written in {{ 'Hindi: Devanagari titles, Roman tags' if s.language == 'hi' else language_name(s.language) }}{{ ' · Made for Kids rules (no comment or bell CTAs)' if s.made_for_kids }}{{ ' · Short' if s.is_short }} · {{ s.model }}</p>
+      {% if s.remote and s.findings %}<ul class="findings-mini">{% for x in s.findings %}<li>{{ x }}</li>{% endfor %}</ul>{% endif %}
+      {% if s.warnings %}<p class="muted small">What the hub fixed in Gemini's answer:</p><ul class="findings-mini">{% for w in s.warnings %}<li>{{ w }}</li>{% endfor %}</ul>{% endif %}
+      {% if s.status != 'applied' %}
+      <form method="post" action="{{ suggest_url }}" class="regen">
+        {% if row %}<input type="hidden" name="row" value="{{ row }}">{% endif %}
+        <button class="btn small" type="submit">Ask Gemini again</button>
+      </form>
+      {% endif %}
+      <p class="muted small">Better metadata can help the right viewers find a video; it doesn't guarantee views.</p>
+    </details>
   {% endif %}
 </div>
 {%- endmacro %}
@@ -148,7 +164,7 @@
         <strong class="clip" title="{{ c.video_title }}">{{ c.video_title or c.youtube_video_id }}</strong>
         <span class="muted small">{{ c.created_at | when }} · {{ c.fields | map(attribute='field') | join(', ') }}</span>
         {% if c.can_rollback %}
-        <form method="post" action="/changes/{{ c.group }}/rollback" onsubmit="return confirm('Put the previous version back on YouTube?')">
+        <form method="post" action="/changes/{{ c.group }}/rollback" data-confirm="The previous title, description and tags go back on YouTube." data-confirm-title="Roll back this change?" data-confirm-ok="Roll back">
           <input type="hidden" name="back" value="{{ back }}">
           <button class="btn small" type="submit">Roll back</button>
         </form>

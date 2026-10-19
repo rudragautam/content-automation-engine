@@ -154,7 +154,9 @@ class TestChannelAnalysis(ChannelCase):
         self.assertTrue(all(s["status"] == "ready" for s in audit["suggestions"]))
 
         page = self.client.get(f"/channels/{self.ch}/analysis/{audit_id}").text
-        self.assertIn("What the checks found", page)
+        self.assertIn("holding the channel back", page)
+        self.assertIn("Videos to improve", page)
+        self.assertIn('data-state="review"', page)
         self.assertIn("Impressions and click-through rate", page)
         self.assertIn("Reporting API", page)
         self.assertIn("Apply to YouTube", page)

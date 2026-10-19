@@ -1,21 +1,18 @@
 {% extends "base.html" %}
+{% from "_ui.html" import icon, empty_state %}
 {% from "_macros.html" import status as status_chip, pager, scope_filter %}
 {% block title %}Media library{% endblock %}
 {% macro mmss(s) -%}{{ '%d:%02d' % (((s or 0) // 60) | int, ((s or 0) % 60) | int) }}{%- endmacro %}
+{% block page_title %}Media library{% endblock %}
+{% block page_desc %}Every rendered video on this PC{% if scope.active %}, for {{ scope.label }}{% endif %}. Tap a video to play it.{% endblock %}
 {% block content %}
-<div class="page-head">
-  <div>
-    <h1>Media library</h1>
-    <div class="sub">Every rendered video on this PC{% if scope.active %} · <span class="scope-tag">{{ scope.label }}</span>{% endif %}. Click a video to play it.</div>
-  </div>
-  <div class="filters">{{ scope_filter(scope, {'niche': niche, 'status': status}) }}</div>
-</div>
+<div class="filters" style="margin-bottom:var(--s5)">{{ scope_filter(scope, {'niche': niche, 'status': status}) }}</div>
 
-<nav class="pill-list" aria-label="Niches" style="margin-bottom:10px">
+<nav class="pill-list" aria-label="Niches" style="margin-bottom:var(--s3)">
   <a class="pill {{ 'on' if not niche }}" href="/media?status={{ status }}">All niches<span class="count">{{ all_count }}</span></a>
   {% for n in niches %}<a class="pill {{ 'on' if n.id == niche }}" href="/media?niche={{ n.id }}&status={{ status }}">{{ n.name }}<span class="count">{{ n.count }}</span></a>{% endfor %}
 </nav>
-<nav class="pill-list" aria-label="Status" style="margin-bottom:16px">
+<nav class="pill-list" aria-label="Status" style="margin-bottom:var(--s5)">
   {% for key, label in [('', 'Any status'), ('rendered', 'Not on YouTube yet'), ('youtube', 'On YouTube')] %}
   <a class="pill {{ 'on' if status == key }}" href="/media?niche={{ niche }}&status={{ key }}">{{ label }}</a>
   {% endfor %}
@@ -34,23 +31,23 @@
         <td class="r num">{{ mmss(v.duration_s) }}</td>
         <td>{{ status_chip(v.status) }}</td>
         <td class="num">{{ v.publish_at | when }}</td>
-        <td class="secondary clip" style="max-width:140px" title="{{ v.audio_title or '' }}">{{ v.audio_title or '—' }}</td>
+        <td class="secondary" title="{{ v.audio_title or '' }}">{{ v.audio_title or '—' }}</td>
         <td class="r num">{{ v.size | filesizeformat }}</td>
-        <td class="r nowrap"><button class="btn small primary" type="button" data-play-button>▶ Play</button>
+        <td class="r nowrap"><button class="btn small primary" type="button" data-play-button>{{ icon('play', cls='sm') }}Play</button>
           <a class="btn small" href="/media/video/{{ v.id }}?download=1">Download</a></td>
       </tr>
     {% endfor %}</tbody>
   </table></div>
   {{ pager(videos, "videos") }}
   {% else %}
-  <div class="empty">{% if all_count %}No videos match these filters.{% else %}No rendered videos yet. Queue content on the <a href="/content">Content</a> page and press Render.{% endif %}</div>
+  {% if all_count %}{{ empty_state('No videos match these filters', 'Try another niche or status.', '/media', 'Show all', 'media') }}{% else %}{{ empty_state('No rendered videos yet', 'Queue content and press Render; finished videos appear here.', '/content', 'Add content', 'media') }}{% endif %}
   {% endif %}
 </section>
 
 <dialog class="player" id="player" aria-labelledby="player-title">
   <div class="player-head">
     <div><div class="cell-title" id="player-title"></div><div class="cell-sub" id="player-sub"></div></div>
-    <div class="actions"><a class="btn small" id="player-download" href="#">Download</a><button class="btn small" type="button" id="player-close" aria-label="Close">✕</button></div>
+    <div class="actions"><a class="btn small" id="player-download" href="#">Download</a><button class="icon-btn" type="button" id="player-close" aria-label="Close player">{{ icon('close') }}</button></div>
   </div>
   <div class="player-frame"><video id="player-video" controls playsinline></video></div>
 </dialog>
